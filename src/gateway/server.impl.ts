@@ -831,7 +831,7 @@ export async function startGatewayServer(
     deps,
     broadcast,
   });
-  let { cron, storePath: cronStorePath } = cronState;
+  let { cron, storePath: cronStorePath, runLogPrune: cronRunLogPrune } = cronState;
 
   const { getRuntimeSnapshot, startChannels, startChannel, stopChannel, markChannelLoggedOut } =
     channelManager;
@@ -1191,6 +1191,7 @@ export async function startGatewayServer(
       deps,
       cron,
       cronStorePath,
+      cronRunLogPrune,
       execApprovalManager,
       pluginApprovalManager,
       loadGatewayModelCatalog,
@@ -1381,6 +1382,7 @@ export async function startGatewayServer(
               cronState = nextState.cronState;
               cron = cronState.cron;
               cronStorePath = cronState.storePath;
+              cronRunLogPrune = cronState.runLogPrune;
               channelHealthMonitor = nextState.channelHealthMonitor;
             },
             startChannel,
