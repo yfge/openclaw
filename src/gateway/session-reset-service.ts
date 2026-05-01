@@ -14,11 +14,7 @@ import {
   type SessionEntry,
   updateSessionStore,
 } from "../config/sessions.js";
-import {
-  resolveSessionFilePath,
-  resolveSessionFilePathOptions,
-  resolveSessionTranscriptPathInDir,
-} from "../config/sessions/paths.js";
+import { resolveSessionFilePath, resolveSessionFilePathOptions } from "../config/sessions/paths.js";
 import { logVerbose } from "../globals.js";
 import { createInternalHookEvent, triggerInternalHook } from "../hooks/internal-hooks.js";
 import { closeTrackedBrowserTabsForSessions } from "../plugin-sdk/browser-runtime.js";
@@ -44,6 +40,38 @@ let cachedChannelRuntime: ReturnType<typeof createPluginRuntime>["channel"] | un
 function getChannelRuntime() {
   cachedChannelRuntime ??= createPluginRuntime().channel;
   return cachedChannelRuntime;
+}
+
+function extractGeneratedTranscriptSessionId(sessionFile?: string): string | undefined {
+  const trimmed = sessionFile?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const base = path.basename(trimmed);
+  if (!base.endsWith(".jsonl")) {
+    return undefined;
+  }
+  const withoutExt = base.slice(0, -".jsonl".length);
+  const topicIndex = withoutExt.indexOf("-topic-");
+  if (topicIndex > 0) {
+    const topicSessionId = withoutExt.slice(0, topicIndex);
+    return looksLikeGeneratedSessionId(topicSessionId) ? topicSessionId : undefined;
+  }
+  const forkMatch = withoutExt.match(
+    /^(\d{4}-\d{2}-\d{2}T[\w-]+(?:Z|[+-]\d{2}(?:-\d{2})?)?)_(.+)$/,
+  );
+  if (forkMatch?.[2]) {
+    return looksLikeGeneratedSessionId(forkMatch[2]) ? forkMatch[2] : undefined;
+  }
+  return looksLikeGeneratedSessionId(withoutExt) ? withoutExt : undefined;
+}
+
+function looksLikeGeneratedSessionId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isGeneratedTranscriptPath(sessionFile: string): boolean {
+  return Boolean(extractGeneratedTranscriptSessionId(sessionFile));
 }
 
 function stripRuntimeModelState(entry?: SessionEntry): SessionEntry | undefined {
@@ -319,26 +347,14 @@ export async function performGatewaySessionReset(params: {
       storePath,
       agentId: sessionAgentId,
     });
-    // Determine whether the current entry uses a custom transcript directory
-    // (i.e. one outside the default sessions dir).  If so, preserve that
-    // directory and only rotate the filename (new sessionId) so spawned/owned
-    // sessions don't silently relocate their transcripts.  See #55474.
-    const defaultSessionFile = resolveSessionFilePath(
-      currentEntry?.sessionId ?? nextSessionId,
-      undefined,
-      pathOpts,
-    );
-    const defaultSessionsDir = path.dirname(defaultSessionFile);
-    const explicitSessionFileDir = currentEntry?.sessionFile
-      ? path.dirname(path.resolve(currentEntry.sessionFile))
+    const defaultSessionFile = resolveSessionFilePath(nextSessionId, undefined, pathOpts);
+    const explicitSessionFile = currentEntry?.sessionFile
+      ? resolveSessionFilePath(nextSessionId, { sessionFile: currentEntry.sessionFile }, pathOpts)
       : undefined;
-    const hasCustomSessionFileDir =
-      explicitSessionFileDir !== undefined &&
-      path.relative(defaultSessionsDir, explicitSessionFileDir).startsWith("..");
-
-    const sessionFile = hasCustomSessionFileDir
-      ? resolveSessionTranscriptPathInDir(nextSessionId, explicitSessionFileDir)
-      : resolveSessionFilePath(nextSessionId, undefined, pathOpts);
+    const sessionFile =
+      explicitSessionFile && !isGeneratedTranscriptPath(explicitSessionFile)
+        ? explicitSessionFile
+        : defaultSessionFile;
     const nextEntry: SessionEntry = {
       sessionId: nextSessionId,
       sessionFile,

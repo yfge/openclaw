@@ -1475,6 +1475,40 @@ describe("gateway server sessions", () => {
     ws.close();
   });
 
+  test("sessions.reset falls back from unsafe outside sessionFile paths", async () => {
+    const { dir } = await createSessionStoreDir();
+    const outsideDir = path.join(sharedSessionStoreDir, "outside-transcripts");
+    const unsafeSessionFile = path.join(outsideDir, "pinned-transcript.jsonl");
+    await writeSessionStore({
+      entries: {
+        main: {
+          sessionId: "sess-unsafe-path",
+          sessionFile: unsafeSessionFile,
+          updatedAt: Date.now(),
+        },
+      },
+    });
+
+    const { ws } = await openClient();
+    const reset = await rpcReq<{
+      ok: true;
+      entry: {
+        sessionId: string;
+        sessionFile?: string;
+      };
+    }>(ws, "sessions.reset", { key: "main" });
+
+    expect(reset.ok).toBe(true);
+    expect(reset.payload?.entry.sessionFile).toBe(
+      path.join(dir, `${reset.payload?.entry.sessionId}.jsonl`),
+    );
+    expect(reset.payload?.entry.sessionFile?.startsWith(outsideDir)).toBe(false);
+    await expect(fs.stat(reset.payload?.entry.sessionFile as string)).resolves.toBeTruthy();
+    await expect(fs.stat(unsafeSessionFile)).rejects.toThrow();
+
+    ws.close();
+  });
+
   test("sessions.preview resolves legacy mixed-case main alias with custom mainKey", async () => {
     const { dir, storePath } = await createSessionStoreDir();
     testState.agentsConfig = { list: [{ id: "ops", default: true }] };
