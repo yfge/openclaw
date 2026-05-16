@@ -188,7 +188,7 @@ function containsEastAsianScript(value: string): boolean {
   return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(value);
 }
 
-function recoverUtf8FileNameFromLatin1Header(value: string): string {
+export function recoverFeishuInboundFileName(value: string): string {
   const recovered = Buffer.from(value, "latin1").toString("utf8");
   if (recovered !== value && !recovered.includes("\uFFFD") && containsEastAsianScript(recovered)) {
     return recovered;
@@ -208,7 +208,7 @@ function decodeDispositionFileName(value: string): string | undefined {
 
   const plainMatch = value.match(/filename="?([^";]+)"?/i);
   const plainFileName = plainMatch?.[1]?.trim();
-  return plainFileName ? recoverUtf8FileNameFromLatin1Header(plainFileName) : undefined;
+  return plainFileName ? recoverFeishuInboundFileName(plainFileName) : undefined;
 }
 
 function extractFeishuDownloadMetadata(response: FeishuDownloadResponse): {
@@ -240,12 +240,13 @@ function extractFeishuDownloadMetadata(response: FeishuDownloadResponse): {
     responseWithOptionalFields.data?.mime_type;
 
   const disposition = readHeaderValue(headers, "content-disposition");
-  const fileName =
+  const rawFileName =
     (disposition ? decodeDispositionFileName(disposition) : undefined) ??
     responseWithOptionalFields.file_name ??
     responseWithOptionalFields.fileName ??
     responseWithOptionalFields.data?.file_name ??
     responseWithOptionalFields.data?.fileName;
+  const fileName = rawFileName ? recoverFeishuInboundFileName(rawFileName) : undefined;
 
   return { contentType, fileName };
 }
@@ -334,7 +335,8 @@ async function saveFeishuResponseMedia(params: {
   contentType?: string;
   fileName?: string;
 }): Promise<SavedMedia> {
-  const { response, maxBytes, contentType, fileName } = params;
+  const { response, maxBytes, contentType } = params;
+  const fileName = params.fileName ? recoverFeishuInboundFileName(params.fileName) : undefined;
   if (Buffer.isBuffer(response)) {
     return saveMediaBuffer(response, contentType, "inbound", maxBytes, fileName);
   }

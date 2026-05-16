@@ -1,7 +1,7 @@
 import type { ClawdbotConfig } from "../runtime-api.js";
 import { buildFeishuConversationId } from "./conversation-id.js";
 import { normalizeFeishuExternalKey } from "./external-keys.js";
-import { saveMessageResourceFeishu } from "./media.js";
+import { recoverFeishuInboundFileName, saveMessageResourceFeishu } from "./media.js";
 import { isFeishuBroadcastMention } from "./mention.js";
 import { parsePostContent } from "./post.js";
 import { getFeishuRuntime } from "./runtime.js";
@@ -299,6 +299,13 @@ export function normalizeFeishuCommandProbeBody(text: string): string {
     .trim();
 }
 
+function readParsedFileName(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  return recoverFeishuInboundFileName(value);
+}
+
 function parseMediaKeys(
   content: string,
   messageType: string,
@@ -309,14 +316,14 @@ function parseMediaKeys(
     const fileKey = normalizeFeishuExternalKey(parsed.file_key);
     switch (messageType) {
       case "image":
-        return { imageKey, fileName: parsed.file_name };
+        return { imageKey, fileName: readParsedFileName(parsed.file_name) };
       case "file":
       case "audio":
       case "sticker":
-        return { fileKey, fileName: parsed.file_name };
+        return { fileKey, fileName: readParsedFileName(parsed.file_name) };
       case "video":
       case "media":
-        return { fileKey, imageKey, fileName: parsed.file_name };
+        return { fileKey, imageKey, fileName: readParsedFileName(parsed.file_name) };
       default:
         return {};
     }
