@@ -11,6 +11,7 @@ import {
   resolveChannelMediaMaxBytes,
   type OpenClawConfig,
   type MSTeamsReplyStyle,
+  type ReplyPayload,
   type RuntimeEnv,
 } from "../runtime-api.js";
 import type { MSTeamsAccessTokenProvider } from "./attachments/types.js";
@@ -149,6 +150,40 @@ export function createMSTeamsReplyDispatcher(params: {
     resolveChannelLimitMb: ({ cfg }) => cfg.channels?.msteams?.mediaMaxMb,
   });
   const feedbackLoopEnabled = params.cfg.channels?.msteams?.feedbackEnabled !== false;
+  const isGroup = conversationType === "groupchat" || conversationType === "channel";
+  const recipientAad =
+    params.conversationRef.user?.aadObjectId ?? params.conversationRef.aadObjectId;
+  const conversationId = params.conversationRef.conversation?.id;
+  const to = !isGroup && recipientAad ? recipientAad : (conversationId ?? "unknown");
+
+  const emitSentHooks = (delivery: {
+    content: string;
+    success: boolean;
+    error?: string;
+    messageId?: string;
+  }) => {
+    emitMSTeamsMessageSentHooks({
+      sessionKeyForInternalHooks: params.sessionKey,
+      to,
+      conversationId,
+      accountId: params.accountId,
+      content: delivery.content,
+      success: delivery.success,
+      error: delivery.error,
+      messageId: delivery.messageId,
+      isGroup,
+      groupId: isGroup ? conversationId : undefined,
+    });
+  };
+
+  const emitNativeStreamSentHooks = (delivery: { payload: ReplyPayload; messageId?: string }) => {
+    emitSentHooks({
+      content: delivery.payload.text ?? "",
+      success: true,
+      messageId: delivery.messageId,
+    });
+  };
+
   const streamController = createTeamsReplyStreamController({
     conversationType,
     context: params.context,
@@ -156,6 +191,7 @@ export function createMSTeamsReplyDispatcher(params: {
     log: params.log,
     msteamsConfig: msteamsCfg,
     progressSeed: `${params.accountId ?? "default"}:${params.conversationRef.conversation?.id ?? ""}`,
+    onNativeStreamFinalizedDelivery: emitNativeStreamSentHooks,
   });
   // Wire the forward-declared gate used by sendTypingIndicator.
   streamActiveRef.current = () => streamController.isStreamActive();
@@ -262,31 +298,15 @@ export function createMSTeamsReplyDispatcher(params: {
     // `extensions/telegram/src/bot/delivery.replies.ts:emitTelegramMessageSentHooks`.
     // The msteams provider was historically silent on outbound — closing that
     // gap here.
-    const isGroup =
-      conversationType === "groupchat" || conversationType === "channel";
-    // For personal DMs, the recipient AAD is the canonical "to" — matches
-    // telegram's `chatId` semantics. For groups, fall back to conversation id.
-    const recipientAad =
-      params.conversationRef.user?.aadObjectId ??
-      params.conversationRef.aadObjectId;
-    const conversationId = params.conversationRef.conversation?.id;
-    const to =
-      !isGroup && recipientAad ? recipientAad : (conversationId ?? "unknown");
     const content = toSend
       .map((m) => (typeof m.text === "string" ? m.text : ""))
       .filter(Boolean)
       .join("\n\n");
-    emitMSTeamsMessageSentHooks({
-      sessionKeyForInternalHooks: params.sessionKey,
-      to,
-      conversationId,
-      accountId: params.accountId,
+    emitSentHooks({
       content,
       success: ids.length > 0,
       error: failureCount > 0 ? formatUnknownError(lastError) : undefined,
       messageId: ids[0],
-      isGroup,
-      groupId: isGroup ? conversationId : undefined,
     });
   };
 

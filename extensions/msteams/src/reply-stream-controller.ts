@@ -51,6 +51,10 @@ export function createTeamsReplyStreamController(params: {
   msteamsConfig?: MSTeamsConfig;
   progressSeed?: string;
   random?: () => number;
+  onNativeStreamFinalizedDelivery?: (delivery: {
+    payload: ReplyPayload;
+    messageId?: string;
+  }) => void;
 }) {
   const isPersonal = normalizeOptionalLowercaseString(params.conversationType) === "personal";
   const streamMode = resolveChannelPreviewStreamMode(params.msteamsConfig, "partial");
@@ -205,11 +209,15 @@ export function createTeamsReplyStreamController(params: {
       deliverNormally: async () => false,
     });
 
-    return result.kind === "preview-finalized"
-      ? hasMedia
-        ? { ...payload, text: undefined }
-        : undefined
-      : payload;
+    if (result.kind === "preview-finalized") {
+      params.onNativeStreamFinalizedDelivery?.({
+        payload,
+        messageId: stream.messageId ?? stream.previewStreamId,
+      });
+      return hasMedia ? { ...payload, text: undefined } : undefined;
+    }
+
+    return payload;
   };
 
   return {
@@ -279,6 +287,10 @@ export function createTeamsReplyStreamController(params: {
       streamReceivedTokens = false;
       pendingFinalize = stream.finalize().then(() => {
         markStreamFinalized();
+        params.onNativeStreamFinalizedDelivery?.({
+          payload,
+          messageId: stream.messageId ?? stream.previewStreamId,
+        });
       });
 
       if (!hasMedia) {

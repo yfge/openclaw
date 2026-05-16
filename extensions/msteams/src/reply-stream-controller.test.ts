@@ -133,6 +133,27 @@ describe("createTeamsReplyStreamController", () => {
     expect(result2).toEqual({ text: "Second segment after tools" });
   });
 
+  it("reports native stream finalization receipt for streamed text", async () => {
+    const onNativeStreamFinalizedDelivery = vi.fn();
+    streamInstances.length = 0;
+    const ctrl = createTeamsReplyStreamController({
+      conversationType: "personal",
+      context: { sendActivity: vi.fn(async () => ({ id: "a" })) } as never,
+      feedbackLoopEnabled: false,
+      log: { debug: vi.fn() } as never,
+      onNativeStreamFinalizedDelivery,
+    });
+
+    ctrl.onPartialReply({ text: "Streamed text" });
+    await expect(ctrl.preparePayload({ text: "Streamed text" })).resolves.toBeUndefined();
+    await ctrl.finalize();
+
+    expect(onNativeStreamFinalizedDelivery).toHaveBeenCalledWith({
+      payload: { text: "Streamed text" },
+      messageId: "final-message",
+    });
+  });
+
   it("finalizes the stream when suppressing first segment", async () => {
     const ctrl = createController();
     ctrl.onPartialReply({ text: "Streamed text" });
@@ -231,6 +252,28 @@ describe("createTeamsReplyStreamController", () => {
 
     expect(result).toEqual({ text: fullText });
     expect(streamInstances[0]?.replaceInformativeWithFinal).toHaveBeenCalledWith(fullText);
+  });
+
+  it("reports progress stream finalization receipt for final native delivery", async () => {
+    const onNativeStreamFinalizedDelivery = vi.fn();
+    streamInstances.length = 0;
+    const ctrl = createTeamsReplyStreamController({
+      conversationType: "personal",
+      context: { sendActivity: vi.fn(async () => ({ id: "a" })) } as never,
+      feedbackLoopEnabled: false,
+      log: { debug: vi.fn() } as never,
+      msteamsConfig: { streaming: { mode: "progress" } } as never,
+      onNativeStreamFinalizedDelivery,
+    });
+    await ctrl.noteProgressWork({ toolName: "exec" });
+    await ctrl.noteProgressWork();
+
+    await expect(ctrl.preparePayload({ text: "complete final answer" })).resolves.toBeUndefined();
+
+    expect(onNativeStreamFinalizedDelivery).toHaveBeenCalledWith({
+      payload: { text: "complete final answer" },
+      messageId: "final-message",
+    });
   });
 
   it("records lifecycle receipt when progress final streaming succeeds", async () => {
