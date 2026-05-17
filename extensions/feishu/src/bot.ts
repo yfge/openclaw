@@ -985,6 +985,7 @@ export async function handleFeishuMessage(params: {
               })
             ).commandAccess.authorized
       : undefined;
+    const commandSource = shouldComputeEffectiveCommandAuthorized ? ("text" as const) : undefined;
 
     // Fetch quoted/replied message content if parentId exists
     let quotedMessageInfo: Awaited<ReturnType<typeof getMessageFeishu>> = null;
@@ -1297,6 +1298,7 @@ export async function handleFeishuMessage(params: {
         Timestamp: messageCreateTimeMs,
         WasMentioned: wasMentioned,
         CommandAuthorized: commandAuthorized,
+        CommandSource: commandSource,
         OriginatingChannel: "feishu" as const,
         OriginatingTo: feishuTo,
         GroupSystemPrompt: isGroup ? normalizeOptionalString(groupConfig?.systemPrompt) : undefined,
@@ -1454,9 +1456,11 @@ export async function handleFeishuMessage(params: {
           });
         } else {
           // Observer agent: no-op dispatcher (session entry + inference, no Feishu reply).
-          // Strip CommandAuthorized so slash commands (e.g. /reset) don't silently
+          // Strip command-turn markers so slash commands (e.g. /reset) don't silently
           // mutate observer sessions — only the active agent should execute commands.
           delete (agentCtx as Record<string, unknown>).CommandAuthorized;
+          delete (agentCtx as Record<string, unknown>).CommandSource;
+          delete (agentCtx as Record<string, unknown>).CommandTurn;
           const noopDispatcher = {
             sendToolResult: () => false,
             sendBlockReply: () => false,

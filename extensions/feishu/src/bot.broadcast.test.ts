@@ -51,14 +51,21 @@ describe("broadcast dispatch", () => {
     ctx,
   ) => {
     finalizeInboundContextCalls.push(ctx);
+    const commandSource = ctx.CommandSource === "text" ? "text" : undefined;
     return {
       ...ctx,
       CommandAuthorized: typeof ctx.CommandAuthorized === "boolean" ? ctx.CommandAuthorized : false,
-      CommandTurn: {
-        kind: "normal",
-        source: "message",
-        authorized: false,
-      },
+      CommandTurn: commandSource
+        ? {
+            kind: "text-slash",
+            source: commandSource,
+            authorized: ctx.CommandAuthorized === true,
+          }
+        : {
+            kind: "normal",
+            source: "message",
+            authorized: false,
+          },
     };
   };
   const mockDispatchReplyFromConfig = vi
@@ -310,6 +317,52 @@ describe("broadcast dispatch", () => {
       | { agentId?: string }
       | undefined;
     expect(dispatcherParams?.agentId).toBe("main");
+  });
+
+  it("strips slash-command markers from broadcast observer sessions", async () => {
+    mockShouldComputeCommandAuthorized.mockReturnValue(true);
+    const cfg: ClawdbotConfig = {
+      broadcast: { "oc-broadcast-group": ["susan", "main"] },
+      agents: { list: [{ id: "main" }, { id: "susan" }] },
+      channels: {
+        feishu: {
+          appId: "cli_test",
+          appSecret: "sec_test", // pragma: allowlist secret
+          allowFrom: ["ou-sender"],
+          groups: {
+            "oc-broadcast-group": {
+              requireMention: false,
+            },
+          },
+        },
+      },
+    };
+    const event = createBroadcastEvent({
+      messageId: "msg-broadcast-command-observer",
+      text: "/status",
+    });
+
+    await handleFeishuMessage({
+      cfg,
+      event,
+      runtime: createRuntimeEnv(),
+    });
+
+    expect(mockDispatchReplyFromConfig).toHaveBeenCalledTimes(2);
+    const calls = mockDispatchReplyFromConfig.mock.calls.map(
+      (call) => call[0] as { ctx?: Record<string, unknown> },
+    );
+    const observerCtx = calls.find(
+      (call) => call.ctx?.SessionKey === "agent:susan:feishu:group:oc-broadcast-group",
+    )?.ctx;
+    const activeCtx = calls.find(
+      (call) => call.ctx?.SessionKey === "agent:main:feishu:group:oc-broadcast-group",
+    )?.ctx;
+    expect(observerCtx?.CommandAuthorized).toBeUndefined();
+    expect(observerCtx?.CommandSource).toBeUndefined();
+    expect(observerCtx?.CommandTurn).toBeUndefined();
+    expect(activeCtx?.CommandSource).toBe("text");
+    expect(activeCtx?.CommandTurn).toMatchObject({ kind: "text-slash", source: "text" });
   });
 
   it("skips broadcast dispatch when bot is NOT mentioned (requireMention=true)", async () => {
