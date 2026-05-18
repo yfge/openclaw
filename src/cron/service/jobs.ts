@@ -143,7 +143,10 @@ function isStaggeredCronRunAtMs(job: CronJob, runAtMs: number): boolean {
   if (job.schedule.kind !== "cron" || !isFiniteTimestamp(runAtMs)) {
     return false;
   }
-  const previous = computeStaggeredCronPreviousRunAtMs(job, runAtMs + 1);
+  // Croner resolves previous runs at second granularity. Probing only 1ms
+  // beyond an exact scheduled second can still land inside the candidate
+  // second and return the prior slot, so advance past the whole second.
+  const previous = computeStaggeredCronPreviousRunAtMs(job, runAtMs + 1_000);
   return previous === runAtMs;
 }
 

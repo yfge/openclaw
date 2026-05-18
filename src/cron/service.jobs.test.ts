@@ -784,6 +784,61 @@ describe("recomputeNextRuns", () => {
     expect(job.state.nextRunAtMs).toBe(validFuture);
   });
 
+  it("preserves exact-second future cron slots during maintenance", () => {
+    const now = Date.parse("2026-05-05T12:00:00.000Z");
+    const validFuture = Date.parse("2026-05-08T19:00:00.000Z");
+    const job: CronJob = {
+      id: "daily-honolulu-exact-second",
+      name: "daily honolulu exact second",
+      enabled: true,
+      createdAtMs: Date.parse("2026-05-05T00:00:00.000Z"),
+      updatedAtMs: Date.parse("2026-05-05T00:00:00.000Z"),
+      schedule: { kind: "cron", expr: "0 9 * * *", tz: "Pacific/Honolulu", staggerMs: 0 },
+      sessionTarget: "main",
+      wakeMode: "now",
+      payload: { kind: "systemEvent", text: "tick" },
+      state: { nextRunAtMs: validFuture },
+    };
+    const state = {
+      ...createMockState(now),
+      store: { version: 1 as const, jobs: [job] },
+    } as CronServiceState;
+
+    expect(recomputeNextRunsForMaintenance(state)).toBe(false);
+    expect(job.state.nextRunAtMs).toBe(validFuture);
+  });
+
+  it("repairs near-miss future cron nextRunAtMs values around exact-second slots", () => {
+    const now = Date.parse("2026-05-05T12:00:00.000Z");
+    const expected = Date.parse("2026-05-05T19:00:00.000Z");
+    const nearMisses = [
+      Date.parse("2026-05-08T18:59:30.000Z"),
+      Date.parse("2026-05-08T19:00:30.000Z"),
+    ];
+
+    for (const [index, nextRunAtMs] of nearMisses.entries()) {
+      const job: CronJob = {
+        id: `daily-honolulu-near-miss-${index}`,
+        name: `daily honolulu near miss ${index}`,
+        enabled: true,
+        createdAtMs: Date.parse("2026-05-05T00:00:00.000Z"),
+        updatedAtMs: Date.parse("2026-05-05T00:00:00.000Z"),
+        schedule: { kind: "cron", expr: "0 9 * * *", tz: "Pacific/Honolulu", staggerMs: 0 },
+        sessionTarget: "main",
+        wakeMode: "now",
+        payload: { kind: "systemEvent", text: "tick" },
+        state: { nextRunAtMs },
+      };
+      const state = {
+        ...createMockState(now),
+        store: { version: 1 as const, jobs: [job] },
+      } as CronServiceState;
+
+      expect(recomputeNextRunsForMaintenance(state)).toBe(true);
+      expect(job.state.nextRunAtMs).toBe(expected);
+    }
+  });
+
   it("repairs future cron nextRunAtMs values that would fire before the next schedule slot", () => {
     const now = Date.parse("2026-05-05T12:00:00.000Z");
     const tooEarly = Date.parse("2026-05-05T12:30:00.000Z");
