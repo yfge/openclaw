@@ -58,7 +58,24 @@ describe("boolean config validation", () => {
   });
 });
 
-describe("model provider localService config", () => {
+describe("model provider config", () => {
+  it("accepts a standalone per-provider timeout override for built-in provider config", () => {
+    const result = OpenClawSchema.safeParse({
+      models: {
+        providers: {
+          openai: {
+            timeoutSeconds: 600,
+          },
+        },
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.models?.providers?.openai?.timeoutSeconds).toBe(600);
+    }
+  });
+
   it("accepts on-demand local provider service settings", () => {
     const result = OpenClawSchema.safeParse({
       models: {
