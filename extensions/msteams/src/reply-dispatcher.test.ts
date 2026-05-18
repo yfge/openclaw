@@ -10,10 +10,13 @@ const emitMSTeamsMessageSentHooksMock = vi.hoisted(() => vi.fn());
 const streamInstances = vi.hoisted(
   () =>
     [] as Array<{
+      content: string;
       hasContent: boolean;
       isFinalized: boolean;
       isFailed: boolean;
       streamedLength: number;
+      messageId?: string;
+      previewStreamId?: string;
       sendInformativeUpdate: ReturnType<typeof vi.fn>;
       update: ReturnType<typeof vi.fn>;
       finalize: ReturnType<typeof vi.fn>;
@@ -52,14 +55,23 @@ vi.mock("./revoked-context.js", () => ({
 
 vi.mock("./streaming-message.js", () => ({
   TeamsHttpStream: class {
-    hasContent = false;
+    content = "";
     isFinalized = false;
     isFailed = false;
     streamedLength = 0;
+    messageId: string | undefined;
+    previewStreamId = "preview-stream-id";
+    get hasContent() {
+      return this.content.length > 0 && !this.isFailed;
+    }
     sendInformativeUpdate = vi.fn(async () => {});
-    update = vi.fn();
-    finalize = vi.fn(async function (this: { isFinalized: boolean }) {
+    update = vi.fn((text: string) => {
+      this.content = text;
+    });
+    finalize = vi.fn(async function (this: { isFinalized: boolean; messageId?: string }) {
       this.isFinalized = true;
+      this.messageId = "stream-final-id";
+      return this.messageId;
     });
 
     constructor() {
@@ -531,10 +543,31 @@ describe("createMSTeamsReplyDispatcher", () => {
     expect(enqueueSystemEventMock).not.toHaveBeenCalled();
   });
 
+  it("emits message:sent hook for native stream finalization delivery", async () => {
+    const dispatcher = createDispatcher("personal");
+    const options = dispatcherOptions();
+
+    dispatcher.replyOptions.onPartialReply?.({ text: "streamed final answer" });
+    await options.deliver({ text: "streamed final answer" });
+    await dispatcher.markDispatchIdle();
+
+    expect(sendMSTeamsMessagesMock).not.toHaveBeenCalled();
+    expect(emitMSTeamsMessageSentHooksMock).toHaveBeenCalledTimes(1);
+    const hookCall = emitMSTeamsMessageSentHooksMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(hookCall).toMatchObject({
+      sessionKeyForInternalHooks: "agent:main:main",
+      to: "conv",
+      conversationId: "conv",
+      content: "streamed final answer",
+      success: true,
+      messageId: "stream-final-id",
+      isGroup: false,
+    });
+    expect(hookCall.error).toBeUndefined();
+  });
+
   it("emits message:sent hook with channelId=msteams and recipient AAD on successful personal-DM delivery", async () => {
-    renderReplyPayloadsToMessagesMock.mockReturnValue([
-      { text: "hello world" } as never,
-    ] as never);
+    renderReplyPayloadsToMessagesMock.mockReturnValue([{ text: "hello world" } as never] as never);
     sendMSTeamsMessagesMock.mockResolvedValue(["bf-msg-id-1"] as never);
 
     // Override the default conversationRef to include user.aadObjectId.
@@ -571,10 +604,7 @@ describe("createMSTeamsReplyDispatcher", () => {
     await dispatcher.markDispatchIdle();
 
     expect(emitMSTeamsMessageSentHooksMock).toHaveBeenCalledTimes(1);
-    const hookCall = emitMSTeamsMessageSentHooksMock.mock.calls[0]?.[0] as Record<
-      string,
-      unknown
-    >;
+    const hookCall = emitMSTeamsMessageSentHooksMock.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(hookCall).toMatchObject({
       sessionKeyForInternalHooks: "agent:eva:msteams:direct:abc123",
       to: "aad-recipient-123",
@@ -590,9 +620,7 @@ describe("createMSTeamsReplyDispatcher", () => {
   });
 
   it("emits message:sent hook with isGroup=true + groupId set on groupChat delivery", async () => {
-    renderReplyPayloadsToMessagesMock.mockReturnValue([
-      { text: "group reply" } as never,
-    ] as never);
+    renderReplyPayloadsToMessagesMock.mockReturnValue([{ text: "group reply" } as never] as never);
     sendMSTeamsMessagesMock.mockResolvedValue(["bf-msg-id-2"] as never);
 
     const contextSendActivity = vi.fn(async () => ({ id: "activity-1" }));
@@ -627,10 +655,7 @@ describe("createMSTeamsReplyDispatcher", () => {
     await dispatcher.markDispatchIdle();
 
     expect(emitMSTeamsMessageSentHooksMock).toHaveBeenCalledTimes(1);
-    const hookCall = emitMSTeamsMessageSentHooksMock.mock.calls[0]?.[0] as Record<
-      string,
-      unknown
-    >;
+    const hookCall = emitMSTeamsMessageSentHooksMock.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(hookCall).toMatchObject({
       to: "19:group-conv",
       isGroup: true,
@@ -640,16 +665,10 @@ describe("createMSTeamsReplyDispatcher", () => {
   });
 
   it("emits message:sent hook with success=false + error on full delivery failure", async () => {
-    renderReplyPayloadsToMessagesMock.mockReturnValue([
-      { text: "failing" } as never,
-    ] as never);
+    renderReplyPayloadsToMessagesMock.mockReturnValue([{ text: "failing" } as never] as never);
     sendMSTeamsMessagesMock
-      .mockRejectedValueOnce(
-        Object.assign(new Error("gateway timeout"), { statusCode: 502 }),
-      )
-      .mockRejectedValueOnce(
-        Object.assign(new Error("gateway timeout"), { statusCode: 502 }),
-      );
+      .mockRejectedValueOnce(Object.assign(new Error("gateway timeout"), { statusCode: 502 }))
+      .mockRejectedValueOnce(Object.assign(new Error("gateway timeout"), { statusCode: 502 }));
 
     const contextSendActivity = vi.fn(async () => ({ id: "activity-1" }));
     const dispatcher = createMSTeamsReplyDispatcher({
@@ -683,10 +702,7 @@ describe("createMSTeamsReplyDispatcher", () => {
     await dispatcher.markDispatchIdle();
 
     expect(emitMSTeamsMessageSentHooksMock).toHaveBeenCalledTimes(1);
-    const hookCall = emitMSTeamsMessageSentHooksMock.mock.calls[0]?.[0] as Record<
-      string,
-      unknown
-    >;
+    const hookCall = emitMSTeamsMessageSentHooksMock.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(hookCall).toMatchObject({
       to: "aad-recipient-789",
       success: false,

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 const streamInstances = vi.hoisted(
   () =>
     [] as Array<{
+      content: string;
       hasContent: boolean;
       isFinalized: boolean;
       isFailed: boolean;
@@ -18,6 +19,7 @@ const streamInstances = vi.hoisted(
 
 vi.mock("./streaming-message.js", () => ({
   TeamsHttpStream: class {
+    content = "";
     hasContent = false;
     isFinalized = false;
     isFailed = false;
@@ -26,9 +28,10 @@ vi.mock("./streaming-message.js", () => ({
     previewStreamId = "preview-stream";
     sendInformativeUpdate = vi.fn(async () => {});
     update = vi.fn(function (
-      this: { hasContent: boolean; isFailed: boolean; streamedLength: number },
+      this: { content: string; hasContent: boolean; isFailed: boolean; streamedLength: number },
       payloadText?: string,
     ) {
+      this.content = payloadText ?? "";
       if ((payloadText?.length ?? 0) > 4000) {
         this.hasContent = false;
         this.isFailed = true;
@@ -45,6 +48,7 @@ vi.mock("./streaming-message.js", () => ({
         isFinalized: boolean;
         streamedLength: number;
         messageId?: string;
+        content: string;
         update: (payloadText?: string) => void;
       },
       payloadText: string,

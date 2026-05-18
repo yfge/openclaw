@@ -32,6 +32,13 @@ import { TeamsHttpStream } from "./streaming-message.js";
 // when combined with `undefined` in a union.
 type Maybe<T> = T | undefined;
 
+export type TeamsStreamFinalizeResult = {
+  content: string;
+  success: boolean;
+  error?: string;
+  messageId?: string;
+};
+
 export function pickInformativeStatusText(
   params: { config?: MSTeamsConfig; seed?: string; random?: () => number } | (() => number) = {},
 ): string | undefined {
@@ -75,10 +82,35 @@ export function createTeamsReplyStreamController(params: {
   let informativeUpdateSent = false;
   let progressLines: Array<string | ChannelProgressDraftLine> = [];
   let lastInformativeText = "";
-  let pendingFinalize: Promise<void> | undefined;
+  let pendingFinalize: Promise<TeamsStreamFinalizeResult | undefined> | undefined;
+  let streamFinalizeResultEmitted = false;
   let liveState: LiveMessageState<ReplyPayload> = createLiveMessageState({
     canFinalizeInPlace: Boolean(stream),
   });
+
+  const buildStreamFinalizeResult = (error?: string): TeamsStreamFinalizeResult | undefined => {
+    if (!stream || !stream.content.trim()) {
+      return undefined;
+    }
+    const messageId = stream.messageId ?? stream.previewStreamId;
+    const success = !stream.isFailed;
+    return {
+      content: stream.content,
+      success,
+      error: success ? undefined : (error ?? "Teams stream finalization failed"),
+      messageId: success ? messageId : undefined,
+    };
+  };
+
+  const takeStreamFinalizeResult = (
+    result: TeamsStreamFinalizeResult | undefined,
+  ): TeamsStreamFinalizeResult | undefined => {
+    if (!result || streamFinalizeResultEmitted) {
+      return undefined;
+    }
+    streamFinalizeResultEmitted = true;
+    return result;
+  };
 
   const markStreamFinalized = () => {
     if (!stream || stream.isFailed) {
@@ -279,6 +311,7 @@ export function createTeamsReplyStreamController(params: {
       streamReceivedTokens = false;
       pendingFinalize = stream.finalize().then(() => {
         markStreamFinalized();
+        return buildStreamFinalizeResult();
       });
 
       if (!hasMedia) {
@@ -287,13 +320,19 @@ export function createTeamsReplyStreamController(params: {
       return { ...payload, text: undefined };
     },
 
-    async finalize(): Promise<void> {
+    async finalize(): Promise<TeamsStreamFinalizeResult | undefined> {
       progressDraftGate.cancel();
-      await pendingFinalize;
+      const result = await pendingFinalize;
       if (!pendingFinalize) {
-        await stream?.finalize();
-        markStreamFinalized();
+        try {
+          await stream?.finalize();
+          markStreamFinalized();
+          return takeStreamFinalizeResult(buildStreamFinalizeResult());
+        } catch (err) {
+          return takeStreamFinalizeResult(buildStreamFinalizeResult(formatUnknownError(err)));
+        }
       }
+      return takeStreamFinalizeResult(result);
     },
 
     hasStream(): boolean {

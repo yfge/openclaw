@@ -29,7 +29,10 @@ import {
   sendMSTeamsMessages,
 } from "./messenger.js";
 import type { MSTeamsMonitorLogger } from "./monitor-types.js";
-import { createTeamsReplyStreamController } from "./reply-stream-controller.js";
+import {
+  createTeamsReplyStreamController,
+  type TeamsStreamFinalizeResult,
+} from "./reply-stream-controller.js";
 import { withRevokedProxyFallback } from "./revoked-context.js";
 import { getMSTeamsRuntime } from "./runtime.js";
 import type { MSTeamsTurnContext } from "./sdk-types.js";
@@ -169,6 +172,41 @@ export function createMSTeamsReplyDispatcher(params: {
 
   const pendingMessages: MSTeamsRenderedMessage[] = [];
 
+  const buildSentHookTarget = () => {
+    const isGroup = conversationType === "groupchat" || conversationType === "channel";
+    // For personal DMs, the recipient AAD is the canonical "to" — matches
+    // telegram's `chatId` semantics. For groups, fall back to conversation id.
+    const recipientAad =
+      params.conversationRef.user?.aadObjectId ?? params.conversationRef.aadObjectId;
+    const conversationId = params.conversationRef.conversation?.id;
+    const to = !isGroup && recipientAad ? recipientAad : (conversationId ?? "unknown");
+    return { conversationId, groupId: isGroup ? conversationId : undefined, isGroup, to };
+  };
+
+  const emitSentHook = (delivery: {
+    content: string;
+    success: boolean;
+    error?: string;
+    messageId?: string;
+  }) => {
+    if (!delivery.content) {
+      return;
+    }
+    const target = buildSentHookTarget();
+    emitMSTeamsMessageSentHooks({
+      sessionKeyForInternalHooks: params.sessionKey,
+      to: target.to,
+      conversationId: target.conversationId,
+      accountId: params.accountId,
+      content: delivery.content,
+      success: delivery.success,
+      error: delivery.error,
+      messageId: delivery.messageId,
+      isGroup: target.isGroup,
+      groupId: target.groupId,
+    });
+  };
+
   const sendMessages = async (messages: MSTeamsRenderedMessage[]): Promise<string[]> => {
     return sendMSTeamsMessages({
       replyStyle: params.replyStyle,
@@ -262,31 +300,15 @@ export function createMSTeamsReplyDispatcher(params: {
     // `extensions/telegram/src/bot/delivery.replies.ts:emitTelegramMessageSentHooks`.
     // The msteams provider was historically silent on outbound — closing that
     // gap here.
-    const isGroup =
-      conversationType === "groupchat" || conversationType === "channel";
-    // For personal DMs, the recipient AAD is the canonical "to" — matches
-    // telegram's `chatId` semantics. For groups, fall back to conversation id.
-    const recipientAad =
-      params.conversationRef.user?.aadObjectId ??
-      params.conversationRef.aadObjectId;
-    const conversationId = params.conversationRef.conversation?.id;
-    const to =
-      !isGroup && recipientAad ? recipientAad : (conversationId ?? "unknown");
     const content = toSend
       .map((m) => (typeof m.text === "string" ? m.text : ""))
       .filter(Boolean)
       .join("\n\n");
-    emitMSTeamsMessageSentHooks({
-      sessionKeyForInternalHooks: params.sessionKey,
-      to,
-      conversationId,
-      accountId: params.accountId,
+    emitSentHook({
       content,
       success: ids.length > 0,
       error: failureCount > 0 ? formatUnknownError(lastError) : undefined,
       messageId: ids[0],
-      isGroup,
-      groupId: isGroup ? conversationId : undefined,
     });
   };
 
@@ -362,9 +384,16 @@ export function createMSTeamsReplyDispatcher(params: {
         });
       })
       .then(() => {
-        return streamController.finalize().catch((err) => {
-          params.log.debug?.("stream finalize failed", { error: formatUnknownError(err) });
-        });
+        return streamController
+          .finalize()
+          .then((streamDelivery: TeamsStreamFinalizeResult | undefined) => {
+            if (streamDelivery) {
+              emitSentHook(streamDelivery);
+            }
+          })
+          .catch((err) => {
+            params.log.debug?.("stream finalize failed", { error: formatUnknownError(err) });
+          });
       })
       .finally(() => {
         baseMarkDispatchIdle();

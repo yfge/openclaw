@@ -266,6 +266,11 @@ export class TeamsHttpStream {
     return this.finalized;
   }
 
+  /** Final text carried by the native stream. */
+  get content(): string {
+    return this.accumulatedText;
+  }
+
   /** Platform id returned by the final message activity, when available. */
   get messageId(): string | undefined {
     return this.finalMessageId;
