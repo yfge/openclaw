@@ -28,3 +28,16 @@ export async function awaitPendingManagerWork(params: {
     } catch {}
   }
 }
+
+export async function awaitStablePendingManagerWork(params: {
+  getPendingSync: () => Promise<void> | null;
+  getPendingProviderInit: () => Promise<void> | null;
+}): Promise<void> {
+  const pendingProviderInit = params.getPendingProviderInit();
+  let pendingSync = params.getPendingSync();
+  await awaitPendingManagerWork({ pendingSync, pendingProviderInit });
+  while (params.getPendingSync() && params.getPendingSync() !== pendingSync) {
+    pendingSync = params.getPendingSync();
+    await awaitPendingManagerWork({ pendingSync });
+  }
+}

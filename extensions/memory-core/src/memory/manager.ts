@@ -30,7 +30,7 @@ import {
   type EmbeddingProviderRuntime,
 } from "./embeddings.js";
 import { bm25RankToScore, buildFtsQuery, mergeHybridResults } from "./hybrid.js";
-import { awaitPendingManagerWork, startAsyncSearchSync } from "./manager-async-state.js";
+import { awaitStablePendingManagerWork, startAsyncSearchSync } from "./manager-async-state.js";
 import { MEMORY_BATCH_FAILURE_LIMIT } from "./manager-batch-state.js";
 import {
   closeManagedCacheEntries,
@@ -1025,7 +1025,6 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       return;
     }
     this.closed = true;
-    const pendingSync = this.syncing;
     const pendingProviderInit = this.providerInitPromise;
     if (this.watchTimer) {
       clearTimeout(this.watchTimer);
@@ -1063,10 +1062,11 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
         closeErrors.set(provider, err);
       }
     };
-    await awaitPendingManagerWork({ pendingProviderInit });
-    await closeCurrentProvider();
     try {
-      await awaitPendingManagerWork({ pendingSync });
+      await awaitStablePendingManagerWork({
+        getPendingSync: () => this.syncing,
+        getPendingProviderInit: () => pendingProviderInit,
+      });
       await closeCurrentProvider();
     } finally {
       closeMemoryDatabase(this.db);
