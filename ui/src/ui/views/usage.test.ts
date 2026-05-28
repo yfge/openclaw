@@ -112,4 +112,29 @@ describe("renderUsage", () => {
     expect(container.querySelector(".usage-page-title")).toBeNull();
     expect(container.querySelector(".usage-header")).not.toBeNull();
   });
+
+  it("shows configured agent filter options even before non-main sessions are loaded", () => {
+    const container = document.createElement("div");
+
+    render(
+      renderUsage(
+        createUsageProps({
+          data: {
+            loading: false,
+            error: null,
+            sessions: [],
+            availableAgentIds: ["main", "ops"],
+            sessionsLimitReached: false,
+            totals: null,
+            aggregates: null,
+            costDaily: [],
+            cacheStatus: undefined,
+          },
+        }),
+      ),
+      container,
+    );
+
+    expect(container.textContent).toContain("ops");
+  });
 });

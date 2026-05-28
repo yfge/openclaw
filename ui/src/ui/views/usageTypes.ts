@@ -27,6 +27,7 @@ export type UsageDataState = {
   loading: boolean;
   error: string | null;
   sessions: UsageSessionEntry[];
+  availableAgentIds?: string[];
   sessionsLimitReached: boolean; // True if 1000 session cap was hit
   totals: UsageTotals | null;
   aggregates: UsageAggregates | null;

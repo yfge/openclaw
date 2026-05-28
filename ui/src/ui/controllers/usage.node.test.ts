@@ -100,6 +100,35 @@ describe("usage controller date interpretation params", () => {
     });
   });
 
+  it("extracts exact agent query scopes and ignores wildcards", () => {
+    expect(testApi.resolveUsageAgentIds("agent:ops provider:openai agent:qa")).toEqual([
+      "ops",
+      "qa",
+    ]);
+    expect(testApi.resolveUsageAgentIds("agent:ops* agent:?")).toEqual([]);
+  });
+
+  it("passes a selected agent filter through to sessions.usage", async () => {
+    const request = vi.fn(async () => ({}));
+    const state = createState(request, {
+      usageTimeZone: "utc",
+      usageQuery: "agent:ops provider:openai",
+    });
+
+    await loadUsage(state);
+
+    expect(request).toHaveBeenNthCalledWith(1, "sessions.usage", {
+      startDate: "2026-02-16",
+      endDate: "2026-02-16",
+      mode: "utc",
+      groupBy: "family",
+      includeHistorical: true,
+      limit: 1000,
+      includeContextWeight: true,
+      agentId: "ops",
+    });
+  });
+
   it("captures useful error strings in loadUsage", async () => {
     const request = vi.fn(async () => {
       throw new Error("request failed");

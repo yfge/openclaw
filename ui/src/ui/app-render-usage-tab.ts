@@ -1,7 +1,12 @@
 import { nothing } from "lit";
 import type { AppViewState } from "./app-view-state.ts";
 import type { UsageState } from "./controllers/usage.ts";
-import { loadUsage, loadSessionTimeSeries, loadSessionLogs } from "./controllers/usage.ts";
+import {
+  loadUsage,
+  loadSessionTimeSeries,
+  loadSessionLogs,
+  resolveUsageAgentIds,
+} from "./controllers/usage.ts";
 import { renderUsage } from "./views/usage.ts";
 
 type UsageCacheStatus = NonNullable<NonNullable<UsageState["usageResult"]>["cacheStatus"]>;
@@ -40,6 +45,20 @@ const debouncedLoadUsage = (state: UsageState) => {
   usageDateDebounceTimeout = window.setTimeout(() => void loadUsage(state), 400);
 };
 
+function applyUsageQuery(state: AppViewState, nextQuery: string): void {
+  const previousAgentScope = resolveUsageAgentIds(state.usageQuery);
+  const nextAgentScope = resolveUsageAgentIds(nextQuery);
+  state.usageQuery = nextQuery;
+  if (previousAgentScope.join("\u0000") !== nextAgentScope.join("\u0000")) {
+    state.usageSelectedSessions = [];
+    state.usageSelectedDays = [];
+    state.usageSelectedHours = [];
+    state.usageTimeSeries = null;
+    state.usageSessionLogs = null;
+    void loadUsage(state);
+  }
+}
+
 export function renderUsageTab(state: AppViewState) {
   if (state.tab !== "usage") {
     return nothing;
@@ -50,6 +69,7 @@ export function renderUsageTab(state: AppViewState) {
       loading: state.usageLoading,
       error: state.usageError,
       sessions: state.usageResult?.sessions ?? [],
+      availableAgentIds: (state.agentsList?.agents ?? []).map((entry) => entry.id),
       sessionsLimitReached: (state.usageResult?.sessions?.length ?? 0) >= 1000,
       totals: state.usageResult?.totals ?? null,
       aggregates: state.usageResult?.aggregates ?? null,
@@ -157,7 +177,7 @@ export function renderUsageTab(state: AppViewState) {
             window.clearTimeout(state.usageQueryDebounceTimer);
           }
           state.usageQueryDebounceTimer = window.setTimeout(() => {
-            state.usageQuery = state.usageQueryDraft;
+            applyUsageQuery(state, state.usageQueryDraft);
             state.usageQueryDebounceTimer = null;
           }, 250);
         },
@@ -166,7 +186,7 @@ export function renderUsageTab(state: AppViewState) {
             window.clearTimeout(state.usageQueryDebounceTimer);
             state.usageQueryDebounceTimer = null;
           }
-          state.usageQuery = state.usageQueryDraft;
+          applyUsageQuery(state, state.usageQueryDraft);
         },
         onClearQuery: () => {
           if (state.usageQueryDebounceTimer) {
@@ -174,7 +194,7 @@ export function renderUsageTab(state: AppViewState) {
             state.usageQueryDebounceTimer = null;
           }
           state.usageQueryDraft = "";
-          state.usageQuery = "";
+          applyUsageQuery(state, "");
         },
         onSelectDay: (day, shiftKey) => {
           if (shiftKey && state.usageSelectedDays.length > 0) {

@@ -2,6 +2,7 @@ import { getSafeLocalStorage } from "../../local-storage.ts";
 import type { GatewayBrowserClient } from "../gateway.ts";
 import { normalizeLowercaseStringOrEmpty } from "../string-coerce.ts";
 import type { SessionsUsageResult, CostUsageSummary, SessionUsageTimeSeries } from "../types.ts";
+import { extractQueryTerms } from "../usage-helpers.ts";
 import type { SessionLogEntry } from "../views/usage.ts";
 import {
   formatMissingOperatorReadScopeMessage,
@@ -27,6 +28,7 @@ export type UsageState = {
   usageSessionLogs: SessionLogEntry[] | null;
   usageSessionLogsLoading: boolean;
   usageTimeZone: "local" | "utc";
+  usageQuery?: string;
   settings?: { gatewayUrl?: string };
 };
 
@@ -196,6 +198,21 @@ function applyUsageResults(state: UsageState, sessionsRes: unknown, costRes: unk
   }
 }
 
+export function resolveUsageAgentIds(query: string | undefined): string[] {
+  const agentIds = new Set<string>();
+  for (const term of extractQueryTerms(query ?? "")) {
+    if (normalizeLowercaseStringOrEmpty(term.key ?? "") !== "agent") {
+      continue;
+    }
+    const value = term.value.trim();
+    if (!value || value.includes("*") || value.includes("?")) {
+      continue;
+    }
+    agentIds.add(value);
+  }
+  return Array.from(agentIds);
+}
+
 export async function loadUsage(
   state: UsageState,
   overrides?: {
@@ -213,6 +230,7 @@ export async function loadUsage(
   try {
     const startDate = overrides?.startDate ?? state.usageStartDate;
     const endDate = overrides?.endDate ?? state.usageEndDate;
+    const usageAgentIds = resolveUsageAgentIds(state.usageQuery);
     const runUsageRequests = (includeDateInterpretation: boolean, includeUsageScope: boolean) => {
       const dateInterpretation = includeDateInterpretation
         ? buildDateInterpretationParams(state.usageTimeZone)
@@ -223,14 +241,18 @@ export async function loadUsage(
             includeHistorical: state.usageScope === "family",
           }
         : undefined;
+      const sessionsUsageParams = {
+        startDate,
+        endDate,
+        ...dateInterpretation,
+        ...usageScopeParams,
+        limit: 1000, // Cap at 1000 sessions
+        includeContextWeight: true,
+      };
       return Promise.all([
         client.request("sessions.usage", {
-          startDate,
-          endDate,
-          ...dateInterpretation,
-          ...usageScopeParams,
-          limit: 1000, // Cap at 1000 sessions
-          includeContextWeight: true,
+          ...sessionsUsageParams,
+          ...(usageAgentIds.length === 1 ? { agentId: usageAgentIds[0] } : {}),
         }),
         client.request("usage.cost", {
           startDate,
@@ -288,6 +310,7 @@ export const testApi = {
   isLegacyDateInterpretationUnsupportedError,
   isLegacyUsageScopeUnsupportedError,
   normalizeGatewayCompatibilityKey,
+  resolveUsageAgentIds,
   shouldSendLegacyDateInterpretation,
   rememberLegacyDateInterpretation,
   shouldSendLegacyUsageScopeParams,
