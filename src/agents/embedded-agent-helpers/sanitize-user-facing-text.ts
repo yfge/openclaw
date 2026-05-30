@@ -49,6 +49,8 @@ const MODEL_CAPACITY_ERROR_USER_MESSAGE =
 const OVERLOADED_ERROR_USER_MESSAGE =
   "The AI service is temporarily overloaded. Please try again in a moment.";
 const TOOL_CALLS_OMITTED_PLACEHOLDER_LINE_RE = /^[ \t]*\[tool calls omitted\][ \t]*$/i;
+const INTERNAL_FORMATTING_ARTIFACT_LINE_RE =
+  /^[ \t]*(?:<\|?channel\|>|set-thought\s+<\|?channel\|>|[─]{3,})[ \t]*$/gim;
 const ERROR_PREFIX_RE =
   /^(?:error|(?:[a-z][\w-]*\s+)?api\s*error|openai\s*error|anthropic\s*error|gateway\s*error|codex\s*error|request failed|failed|exception)(?:\s+\d{3})?[:\s-]+/i;
 const CONTEXT_OVERFLOW_ERROR_HEAD_RE =
@@ -385,6 +387,10 @@ function collapseConsecutiveDuplicateBlocks(text: string): string {
   return result.join("\n\n");
 }
 
+function stripStandaloneInternalFormattingArtifacts(text: string): string {
+  return text.replace(INTERNAL_FORMATTING_ARTIFACT_LINE_RE, "");
+}
+
 export function isLikelyHttpErrorText(raw: string): boolean {
   if (isCloudflareOrHtmlErrorPage(raw)) {
     return true;
@@ -414,8 +420,9 @@ export function sanitizeUserFacingText(text: unknown, opts?: { errorContext?: bo
   // It is internal scaffolding, so drop standalone placeholder lines before delivery
   // while preserving ordinary inline mentions a user may be discussing.
   const withoutPlaceholder = stripToolCallsOmittedPlaceholderLines(withoutToolCallXml);
+  const withoutFormattingArtifacts = stripStandaloneInternalFormattingArtifacts(withoutPlaceholder);
   const withoutToolCallBlocks = stripPlainTextToolCallBlocks(
-    stripLegacyBracketToolCallBlocks(withoutPlaceholder),
+    stripLegacyBracketToolCallBlocks(withoutFormattingArtifacts),
   );
   const trimmed = withoutToolCallBlocks.trim();
   if (!trimmed) {

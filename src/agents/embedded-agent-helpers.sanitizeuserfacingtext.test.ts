@@ -240,6 +240,16 @@ describe("sanitizeUserFacingText", () => {
     expect(sanitizeUserFacingText("A\n[tool calls omitted]\n[tool calls omitted]\nB")).toBe("A\nB");
   });
 
+  it("strips standalone internal formatting artifact lines without touching nearby text", () => {
+    expect(sanitizeUserFacingText("<channel|>")).toBe("");
+    expect(sanitizeUserFacingText("set-thought <channel|>")).toBe("");
+    expect(sanitizeUserFacingText("───")).toBe("");
+    expect(sanitizeUserFacingText("Hello\n<channel|>\nWorld")).toBe("Hello\n\nWorld");
+    expect(sanitizeUserFacingText("Please print `<channel|>` literally.")).toBe(
+      "Please print `<channel|>` literally.",
+    );
+  });
+
   it("strips legacy uppercase TOOL_CALL blocks before user-facing delivery", () => {
     const input = [
       "Before",
