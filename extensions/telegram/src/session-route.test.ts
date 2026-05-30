@@ -27,6 +27,36 @@ describe("telegram session route", () => {
     expect(route?.threadId).toBe("12345:99");
   });
 
+  it("aligns proactive direct topic routes with inbound DM topic session keys", async () => {
+    const route = await telegramPlugin.messaging?.resolveOutboundSessionRoute?.({
+      cfg: { session: { dmScope: "per-channel-peer" } },
+      agentId: "main",
+      target: "12345:topic:99",
+    });
+
+    expect(route?.sessionKey).toBe("agent:main:telegram:direct:12345:thread:12345:99");
+    expect(route?.baseSessionKey).toBe("agent:main:telegram:direct:12345");
+    expect(route?.threadId).toBe("12345:99");
+    expect(route?.from).toBe("telegram:12345:topic:99");
+  });
+
+  it("aligns delivery thread ids with inbound DM topic session keys for account-scoped DMs", async () => {
+    const route = await telegramPlugin.messaging?.resolveOutboundSessionRoute?.({
+      cfg: { session: { dmScope: "per-account-channel-peer" } },
+      agentId: "finance",
+      accountId: "finance",
+      target: "104506878",
+      threadId: 174872,
+    });
+
+    expect(route?.sessionKey).toBe(
+      "agent:finance:telegram:finance:direct:104506878:thread:104506878:174872",
+    );
+    expect(route?.baseSessionKey).toBe("agent:finance:telegram:finance:direct:104506878");
+    expect(route?.threadId).toBe("104506878:174872");
+    expect(route?.from).toBe("telegram:104506878:topic:174872");
+  });
+
   it('does not recover currentSessionKey threads for shared dmScope "main" DMs', async () => {
     const route = await telegramPlugin.messaging?.resolveOutboundSessionRoute?.({
       cfg: {},

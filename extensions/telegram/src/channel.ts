@@ -553,9 +553,13 @@ function resolveTelegramOutboundSessionRoute(params: {
   if (isGroup) {
     return baseRoute;
   }
+  const directSessionThreadId =
+    resolvedThreadId !== undefined && (params.cfg.session?.dmScope ?? "main") !== "main"
+      ? `${chatId}:${resolvedThreadId}`
+      : resolvedThreadId;
   const route = buildThreadAwareOutboundSessionRoute({
     route: baseRoute,
-    threadId: resolvedThreadId,
+    threadId: directSessionThreadId,
     currentSessionKey: params.currentSessionKey,
     precedence: ["threadId", "currentSession"],
     canRecoverCurrentThread: ({ route }) =>
@@ -564,8 +568,8 @@ function resolveTelegramOutboundSessionRoute(params: {
   return {
     ...route,
     from:
-      route.threadId !== undefined
-        ? `telegram:${chatId}:topic:${route.threadId}`
+      resolvedThreadId !== undefined
+        ? `telegram:${chatId}:topic:${resolvedThreadId}`
         : `telegram:${chatId}`,
   };
 }
