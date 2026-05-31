@@ -34,6 +34,7 @@ Docs: https://docs.openclaw.ai
 - Control UI: keep collapsed tool cards labeled with the tool name and action instead of generic output text. Thanks @shakkernerd.
 - Agents/Codex: surface Skill Workshop guidance in Codex app-server prompts when `skill_workshop` is available. Thanks @shakkernerd.
 - CLI: keep `plugins list --json` on the snapshot-only path so plugin sweeps avoid loading the full runtime status graph.
+- CLI/cron: keep `cron edit --timeout-seconds` on the same positive-integer parser as `cron add`, with regression coverage for rejected zero, negative, and partial values. Fixes #83909.
 - Plugins: make PixVerse external-plugin ClawHub metadata explicit and keep it out of bundled dist builds.
 - Cron: keep SQLite cron migrations compatible with legacy run-log tables, archived job stores, diagnostic cron names, and legacy one-shot delete-after-run behavior. (#88285)
 - Providers: bound generated media downloads from OpenAI, Runway, xAI, MiniMax, BytePlus, DashScope-compatible, FAL, OpenRouter, Google, Vydra, and Comfy providers.

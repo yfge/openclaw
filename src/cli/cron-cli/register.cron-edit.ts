@@ -9,6 +9,7 @@ import { parseStrictPositiveInteger } from "../../infra/parse-finite-number.js";
 import { sanitizeAgentId } from "../../routing/session-key.js";
 import { defaultRuntime } from "../../runtime.js";
 import { addGatewayClientOptions, callGatewayFromCli } from "../gateway-rpc.js";
+import { parsePositiveIntOrUndefined } from "../program/helpers.js";
 import {
   applyExistingCronSchedulePatch,
   resolveCronEditScheduleRequest,
@@ -241,18 +242,10 @@ export function registerCronEditCommand(cron: Command) {
           const model = normalizeOptionalString(opts.model);
           const thinking = normalizeOptionalString(opts.thinking);
           const toolsAllow = parseCronToolsAllow(opts.tools);
-          const rawTimeoutSeconds =
-            opts.timeoutSeconds === undefined ? undefined : String(opts.timeoutSeconds).trim();
-          if (rawTimeoutSeconds !== undefined && !/^\d+$/u.test(rawTimeoutSeconds)) {
-            throw new Error("Invalid --timeout-seconds (must be a positive integer).");
-          }
-          const timeoutSeconds =
-            rawTimeoutSeconds === undefined ? undefined : Number(rawTimeoutSeconds);
-          const hasTimeoutSeconds =
-            typeof timeoutSeconds === "number" &&
-            Number.isSafeInteger(timeoutSeconds) &&
-            timeoutSeconds > 0;
-          if (rawTimeoutSeconds !== undefined && !hasTimeoutSeconds) {
+          const hasTimeoutSecondsOption = opts.timeoutSeconds !== undefined;
+          const timeoutSeconds = parsePositiveIntOrUndefined(opts.timeoutSeconds);
+          const hasTimeoutSeconds = timeoutSeconds !== undefined;
+          if (hasTimeoutSecondsOption && !hasTimeoutSeconds) {
             throw new Error("Invalid --timeout-seconds (must be a positive integer).");
           }
           const hasDeliveryModeFlag =

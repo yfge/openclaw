@@ -64,6 +64,7 @@ type CronUpdatePatch = {
       message?: string;
       model?: string;
       thinking?: string;
+      timeoutSeconds?: number;
       lightContext?: boolean;
       toolsAllow?: string[];
     };
@@ -1004,6 +1005,24 @@ describe("cron cli", () => {
     expect(patch?.patch?.payload?.kind).toBe("agentTurn");
     expect(patch?.patch?.payload?.model).toBe("opus");
     expect(patch?.patch?.payload?.thinking).toBe("low");
+  });
+
+  it("sets positive timeout seconds on cron edit", async () => {
+    const patch = await runCronEditAndGetPatch(["--timeout-seconds", "30"]);
+
+    expect(patch?.patch?.payload?.kind).toBe("agentTurn");
+    expect(patch?.patch?.payload?.timeoutSeconds).toBe(30);
+  });
+
+  it.each(["0", "-5", "10ms"])("rejects invalid cron edit timeout seconds %s", async (value) => {
+    await expectCronCommandExit(["cron", "edit", "job-1", "--timeout-seconds", value]);
+
+    expectRuntimeErrorContaining("Invalid --timeout-seconds");
+    expect(callGatewayFromCli).not.toHaveBeenCalledWith(
+      "cron.update",
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("sets and clears lightContext on cron edit", async () => {
