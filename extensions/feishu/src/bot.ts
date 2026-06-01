@@ -799,6 +799,7 @@ export async function handleFeishuMessage(params: {
     // Using a group-scoped From causes the agent to treat different users as the same person.
     const feishuFrom = `feishu:${ctx.senderOpenId}`;
     const feishuTo = isGroup ? `chat:${ctx.chatId}` : `user:${ctx.senderOpenId}`;
+    const replyDeliveryTarget = isGroup ? ctx.chatId : feishuTo;
     const peerId = isGroup ? (groupSession?.peerId ?? ctx.chatId) : ctx.senderOpenId;
     const parentPeer = isGroup ? (groupSession?.parentPeer ?? null) : null;
     const replyInThread = isGroup ? (groupSession?.replyInThread ?? false) : false;
@@ -1514,7 +1515,7 @@ export async function handleFeishuMessage(params: {
               cfg,
               agentId,
               runtime: runtime as RuntimeEnv,
-              chatId: ctx.chatId,
+              chatId: replyDeliveryTarget,
               allowReasoningPreview,
               replyToMessageId: replyTargetMessageId,
               skipReplyToInMessages: !isGroup,
@@ -1690,7 +1691,7 @@ export async function handleFeishuMessage(params: {
           cfg,
           agentId: route.agentId,
           runtime: runtime as RuntimeEnv,
-          chatId: ctx.chatId,
+          chatId: replyDeliveryTarget,
           allowReasoningPreview,
           replyToMessageId: replyTargetMessageId,
           skipReplyToInMessages: !isGroup,

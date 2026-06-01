@@ -1091,6 +1091,80 @@ describe("handleFeishuMessage command authorization", () => {
     expect(ensureNoVisibleReplyFallback).not.toHaveBeenCalled();
   });
 
+  it("routes p2p final reply delivery to the sender open_id target", async () => {
+    mockShouldComputeCommandAuthorized.mockReturnValue(false);
+
+    await dispatchMessage({
+      cfg: {
+        channels: {
+          feishu: {
+            dmPolicy: "open",
+          },
+        },
+      } as ClawdbotConfig,
+      event: {
+        sender: {
+          sender_id: {
+            open_id: "ou-sender",
+          },
+        },
+        message: {
+          message_id: "om-p2p-inbound",
+          chat_id: "oc-p2p-chat",
+          chat_type: "p2p",
+          message_type: "text",
+          content: JSON.stringify({ text: "hello" }),
+        },
+      },
+    });
+
+    const dispatcherOptions = mockCallArg<{
+      chatId?: string;
+      replyToMessageId?: string;
+      skipReplyToInMessages?: boolean;
+    }>(mockCreateFeishuReplyDispatcher, 0, 0);
+    expect(dispatcherOptions.chatId).toBe("user:ou-sender");
+    expect(dispatcherOptions.replyToMessageId).toBe("om-p2p-inbound");
+    expect(dispatcherOptions.skipReplyToInMessages).toBe(true);
+  });
+
+  it("keeps group final reply delivery on the group chat target", async () => {
+    mockShouldComputeCommandAuthorized.mockReturnValue(false);
+
+    await dispatchMessage({
+      cfg: {
+        channels: {
+          feishu: {
+            groupPolicy: "open",
+          },
+        },
+      } as ClawdbotConfig,
+      event: {
+        sender: {
+          sender_id: {
+            open_id: "ou-sender",
+          },
+        },
+        message: {
+          message_id: "om-group-inbound",
+          chat_id: "oc-group-chat",
+          chat_type: "group",
+          message_type: "text",
+          content: JSON.stringify({ text: "hello group" }),
+        },
+      },
+    });
+
+    const dispatcherOptions = mockCallArg<{
+      chatId?: string;
+      replyToMessageId?: string;
+      skipReplyToInMessages?: boolean;
+    }>(mockCreateFeishuReplyDispatcher, 0, 0);
+    expect(dispatcherOptions.chatId).toBe("oc-group-chat");
+    expect(dispatcherOptions.replyToMessageId).toBe("om-group-inbound");
+    expect(dispatcherOptions.skipReplyToInMessages).toBe(false);
+  });
+
   it("sends no-visible fallback when queued final delivery fails", async () => {
     mockDispatchReplyFromConfig.mockResolvedValueOnce({
       queuedFinal: true,
