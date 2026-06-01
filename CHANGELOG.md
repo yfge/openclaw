@@ -39,7 +39,7 @@ Docs: https://docs.openclaw.ai
 - Plugins: add a SecretRef provider integration manifest contract and extract shared LLM core packages for provider/plugin reuse. (#82326, #88117)
 - Plugins: persist the plugin install index in SQLite so installed package lookup survives reloads with less filesystem scanning. (#88794)
 - Providers: add MiniMax M3 model support. (#88860)
-- Providers: add a Grok Build CLI agent runtime for local `grok` installs.
+- ACP: add a Grok Build harness target for local `grok agent stdio` installs.
 - Doctor: add disk space health checks and stabilize post-upgrade JSON probes.
 - Channels: store inbound queues in SQLite and migrate iMessage monitor state to SQLite-backed tracking. (#88797)
 - Skills: add the core skills index and centralize skills runtime loading, status, filtering, and prompt formatting.

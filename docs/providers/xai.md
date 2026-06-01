@@ -16,10 +16,10 @@ OAuth does not require an xAI API key, and it does not require the Grok Build
 app. xAI may still show Grok Build on the consent screen because OpenClaw uses
 xAI's shared OAuth client.
 
-OpenClaw also registers a `grok-cli` agent runtime for hosts that have xAI's
-Grok Build CLI installed. That runtime shells out to the local `grok` binary in
-headless mode and keeps model refs canonical to xAI models, for example
-`grok-cli/grok-build-0.1`.
+Hosts that have xAI's Grok Build CLI installed can also run Grok Build as an
+ACP harness through the `acpx` plugin. That path uses the CLI's ACP server
+entrypoint, `grok --no-auto-update agent stdio`, instead of wrapping headless
+`grok -p` calls as a model-provider fallback.
 
 ## Choose your setup path
 
@@ -80,24 +80,25 @@ Use the path that matches your OpenClaw install state:
     ```
 
   </Step>
-  <Step title="Grok Build CLI runtime">
+  <Step title="Grok Build ACP harness">
     Install xAI's local CLI when you want OpenClaw to drive Grok Build through
-    the `grok` binary instead of the direct xAI API transport:
+    its ACP server instead of the direct xAI API transport:
 
     ```bash
     curl -fsSL https://x.ai/cli/install.sh | bash
     grok login
     ```
 
-    Then select the CLI runtime model:
+    Install and enable the ACPX plugin, then spawn the Grok harness:
 
     ```bash
-    openclaw models set grok-cli/grok-build-0.1
+    openclaw plugins install @openclaw/acpx
+    openclaw config set plugins.entries.acpx.enabled true
+    /acp spawn grok --bind here
     ```
 
-    The CLI runtime can also use `XAI_API_KEY` in non-browser environments.
-    OpenClaw runs it with `grok --no-auto-update --no-alt-screen -p ...` and
-    keeps session ids with Grok's headless `-s` / `-r` flags.
+    The `grok` ACP harness uses the CLI's own session, tool, and model handling.
+    OpenClaw only owns ACP routing, chat binding, and delivery.
 
   </Step>
   <Step title="Pick a model">
@@ -178,7 +179,7 @@ below.
 | xAI capability             | OpenClaw surface                          | Status                                                              |
 | -------------------------- | ----------------------------------------- | ------------------------------------------------------------------- |
 | Chat / Responses           | `xai/<model>` model provider              | Yes                                                                 |
-| Grok Build CLI             | `grok-cli/<model>` agent runtime          | Yes, requires local `grok` install                                  |
+| Grok Build CLI             | ACP harness id `grok` via `acpx`          | Yes, requires local `grok` install                                  |
 | Server-side web search     | `web_search` provider `grok`              | Yes                                                                 |
 | Server-side X search       | `x_search` tool                           | Yes                                                                 |
 | Server-side code execution | `code_execution` tool                     | Yes                                                                 |

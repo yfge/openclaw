@@ -98,6 +98,9 @@ const DEFAULT_PERMISSION_MODE: AcpxPermissionMode = "approve-reads";
 const DEFAULT_NON_INTERACTIVE_POLICY: AcpxNonInteractivePermissionPolicy = "fail";
 const DEFAULT_QUEUE_OWNER_TTL_SECONDS = 0.1;
 const DEFAULT_STRICT_WINDOWS_CMD_WRAPPER = true;
+const DEFAULT_ACPX_AGENT_COMMANDS: Record<string, string> = {
+  grok: "grok --no-auto-update agent stdio",
+};
 
 type ParseResult =
   | { ok: true; value: AcpxPluginConfig | undefined }
@@ -244,15 +247,18 @@ export function resolveAcpxPluginConfig(params: {
     openClawToolsMcpBridge,
     moduleUrl: params.moduleUrl,
   });
-  const agents = Object.fromEntries(
-    Object.entries(normalized.agents ?? {}).map(([name, entry]) => {
-      const cmd = entry.command.trim();
-      const cmdArgs = entry.args ?? [];
-      const fullCommand =
-        cmdArgs.length > 0 ? `${cmd} ${cmdArgs.map(shellQuoteCommandArg).join(" ")}` : cmd;
-      return [normalizeLowercaseStringOrEmpty(name), fullCommand];
-    }),
-  );
+  const agents = {
+    ...DEFAULT_ACPX_AGENT_COMMANDS,
+    ...Object.fromEntries(
+      Object.entries(normalized.agents ?? {}).map(([name, entry]) => {
+        const cmd = entry.command.trim();
+        const cmdArgs = entry.args ?? [];
+        const fullCommand =
+          cmdArgs.length > 0 ? `${cmd} ${cmdArgs.map(shellQuoteCommandArg).join(" ")}` : cmd;
+        return [normalizeLowercaseStringOrEmpty(name), fullCommand];
+      }),
+    ),
+  };
 
   // Lowercase probeAgent so lookups match the registry keys built above, which
   // also go through normalizeLowercaseStringOrEmpty. Without this, a user who

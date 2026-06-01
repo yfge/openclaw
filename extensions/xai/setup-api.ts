@@ -1,5 +1,4 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
-import { buildXaiGrokCliBackend } from "./cli-backend.js";
 import { isRecord } from "./src/tool-config-shared.js";
 
 export default definePluginEntry({
@@ -7,7 +6,6 @@ export default definePluginEntry({
   name: "xAI Setup",
   description: "Lightweight xAI setup hooks",
   register(api) {
-    api.registerCliBackend(buildXaiGrokCliBackend());
     api.registerAutoEnableProbe(({ config }) => {
       const pluginConfig = config.plugins?.entries?.xai?.config;
       const web = config.tools?.web as Record<string, unknown> | undefined;

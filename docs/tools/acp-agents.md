@@ -1,5 +1,5 @@
 ---
-summary: "Run external coding harnesses (Claude Code, Cursor, Gemini CLI, explicit Codex ACP, OpenClaw ACP, OpenCode) through the ACP backend"
+summary: "Run external coding harnesses (Claude Code, Cursor, Gemini CLI, Grok Build, explicit Codex ACP, OpenClaw ACP, OpenCode) through the ACP backend"
 read_when:
   - Running coding harnesses through ACP
   - Setting up conversation-bound ACP sessions on messaging channels
@@ -12,7 +12,7 @@ sidebarTitle: "ACP agents"
 
 [Agent Client Protocol (ACP)](https://agentclientprotocol.com/) sessions
 let OpenClaw run external coding harnesses (for example Claude Code,
-Cursor, Copilot, Droid, OpenClaw ACP, OpenCode, Gemini CLI, and other
+Cursor, Copilot, Droid, Grok Build, OpenClaw ACP, OpenCode, Gemini CLI, and other
 supported ACPX harnesses) through an ACP backend plugin.
 
 Each ACP session spawn is tracked as a [background task](/automation/tasks).
@@ -77,7 +77,7 @@ an unavailable backend.
     - `/acp doctor` reports an enabled, healthy backend.
     - The target id is allowed by `acp.allowedAgents` when that allowlist is set.
     - The harness command can start on the Gateway host.
-    - Provider auth is present for that harness (`claude`, `codex`, `gemini`, `opencode`, `droid`, etc.).
+    - Provider auth is present for that harness (`claude`, `codex`, `gemini`, `grok`, `opencode`, `droid`, etc.).
     - The selected model exists for that harness - model ids are not portable across harnesses.
     - The requested `cwd` exists and is accessible, or omit `cwd` and let the backend use its default.
     - Permission mode matches the work. Non-interactive sessions cannot click native permission prompts, so write/exec-heavy coding runs usually need an ACPX permission profile that can proceed headlessly.
@@ -103,6 +103,7 @@ or `sessions_spawn({ runtime: "acp", agentId: "<id>" })` targets:
 | `cursor`   | Cursor CLI ACP (`cursor-agent acp`)            | Override the acpx command if a local install exposes a different ACP entrypoint.    |
 | `droid`    | Factory Droid CLI                              | Requires Factory/Droid auth or `FACTORY_API_KEY` in the harness environment.        |
 | `gemini`   | Gemini CLI ACP adapter                         | Requires Gemini CLI auth or API key setup.                                          |
+| `grok`     | Grok Build CLI ACP (`grok agent stdio`)        | Requires the xAI `grok` CLI plus local Grok auth or API-key env.                    |
 | `iflow`    | iFlow CLI                                      | Adapter availability and model control depend on the installed CLI.                 |
 | `kilocode` | Kilo Code CLI                                  | Adapter availability and model control depend on the installed CLI.                 |
 | `kimi`     | Kimi/Moonshot CLI                              | Requires Kimi/Moonshot auth on the host.                                            |
@@ -207,7 +208,7 @@ Quick `/acp` flow from chat:
     backend is loaded. `acp.dispatch.enabled=false` pauses automatic
     ACP thread dispatch but does not hide or block explicit
     `sessions_spawn({ runtime: "acp" })` calls. It targets ACP harness ids such as `codex`,
-    `claude`, `droid`, `gemini`, or `opencode`. Do not pass a normal
+    `claude`, `droid`, `gemini`, `grok`, or `opencode`. Do not pass a normal
     OpenClaw config agent id from `agents_list` unless that entry is
     explicitly configured with `agents.list[].runtime.type="acp"`;
     otherwise use the default sub-agent runtime. When an OpenClaw agent

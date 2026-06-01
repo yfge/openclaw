@@ -1,7 +1,6 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import { createTestPluginApi } from "openclaw/plugin-sdk/plugin-test-api";
 import {
-  capturePluginRegistration,
   registerProviderPlugin,
   registerSingleProviderPlugin,
 } from "openclaw/plugin-sdk/plugin-test-runtime";
@@ -61,39 +60,6 @@ function requireEntry<T extends { id?: string }>(entries: T[], id: string): T {
 }
 
 describe("xai provider plugin", () => {
-  it("registers the Grok CLI backend", () => {
-    const captured = capturePluginRegistration({ register: plugin.register });
-
-    const backend = captured.cliBackends.find((entry) => entry.id === "grok-cli");
-    if (!backend) {
-      throw new Error("Expected grok-cli backend");
-    }
-    expect(backend.modelProvider).toBe("xai");
-    expect(backend.nativeToolMode).toBe("always-on");
-    expect(backend.config.command).toBe("grok");
-    expect(backend.config.args).toEqual([
-      "--no-auto-update",
-      "--no-alt-screen",
-      "--always-approve",
-      "--output-format",
-      "json",
-      "-p",
-    ]);
-    expect(backend.config.resumeArgs).toEqual([
-      "--no-auto-update",
-      "--no-alt-screen",
-      "--always-approve",
-      "--output-format",
-      "json",
-      "-r",
-      "{sessionId}",
-      "-p",
-    ]);
-    expect(backend.config.modelArg).toBe("-m");
-    expect(backend.config.sessionArg).toBe("-s");
-    expect(backend.config.sessionMode).toBe("always");
-  });
-
   it("exposes OAuth and device-code auth choices", async () => {
     const provider = await registerSingleProviderPlugin(plugin);
 

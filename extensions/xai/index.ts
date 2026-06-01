@@ -8,7 +8,6 @@ import {
   normalizeXaiModelId,
   resolveXaiTransport,
 } from "./api.js";
-import { buildXaiGrokCliBackend } from "./cli-backend.js";
 import {
   buildMissingCodeExecutionApiKeyPayload,
   createCodeExecutionToolDefinition,
@@ -213,7 +212,6 @@ export default defineSingleProviderPluginEntry({
     api.registerImageGenerationProvider(buildXaiImageGenerationProvider());
     api.registerSpeechProvider(buildXaiSpeechProvider());
     api.registerRealtimeTranscriptionProvider(buildXaiRealtimeTranscriptionProvider());
-    api.registerCliBackend(buildXaiGrokCliBackend());
     api.registerTool((ctx) => createLazyCodeExecutionTool(ctx), { name: "code_execution" });
     api.registerTool((ctx) => createLazyXSearchTool(ctx), { name: "x_search" });
   },

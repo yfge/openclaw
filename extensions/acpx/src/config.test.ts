@@ -28,7 +28,9 @@ describe("embedded acpx plugin config", () => {
     expect(resolved.permissionMode).toBe("approve-reads");
     expect(resolved.nonInteractivePermissions).toBe("fail");
     expect(resolved.timeoutSeconds).toBe(120);
-    expect(resolved.agents).toStrictEqual({});
+    expect(resolved.agents).toStrictEqual({
+      grok: "grok --no-auto-update agent stdio",
+    });
   });
 
   it("keeps explicit timeoutSeconds config", () => {
@@ -67,7 +69,24 @@ describe("embedded acpx plugin config", () => {
     expect(resolved.agents).toEqual({
       claude: "claude --acp",
       codex: "codex custom-acp",
+      grok: "grok --no-auto-update agent stdio",
     });
+  });
+
+  it("lets operators override the built-in Grok ACP command", () => {
+    const resolved = resolveAcpxPluginConfig({
+      rawConfig: {
+        agents: {
+          grok: {
+            command: "env",
+            args: ["XAI_API_KEY=xai-example", "grok", "agent", "stdio"],
+          },
+        },
+      },
+      workspaceDir: "/tmp/openclaw-acpx",
+    });
+
+    expect(resolved.agents.grok).toBe("env XAI_API_KEY=xai-example grok agent stdio");
   });
 
   it("combines agent command with args array", () => {
@@ -90,6 +109,7 @@ describe("embedded acpx plugin config", () => {
     expect(resolved.agents).toEqual({
       claude: "node /path/to/adapter.mjs --verbose",
       codex: "codex-acp --model gpt-5",
+      grok: "grok --no-auto-update agent stdio",
     });
   });
 
@@ -108,6 +128,7 @@ describe("embedded acpx plugin config", () => {
 
     expect(resolved.agents).toEqual({
       custom: "node '/tmp/My Adapter.mjs' '--flag=value with spaces' 'owner'\"'\"'s-choice'",
+      grok: "grok --no-auto-update agent stdio",
     });
   });
 
@@ -122,6 +143,7 @@ describe("embedded acpx plugin config", () => {
     });
 
     expect(resolved.agents).toEqual({
+      grok: "grok --no-auto-update agent stdio",
       simple: "simple-acp",
     });
   });
