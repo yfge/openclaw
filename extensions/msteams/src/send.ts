@@ -307,6 +307,7 @@ export async function sendMessageMSTeams(
           ref,
           activity,
           serviceUrlBoundary: sdkCloudOptions,
+          threadActivityId: resolveThreadActivityId(ctx),
         });
 
         log.info("sent native file card", {
@@ -351,6 +352,7 @@ export async function sendMessageMSTeams(
         ref,
         activity,
         serviceUrlBoundary: sdkCloudOptions,
+        threadActivityId: resolveThreadActivityId(ctx),
       });
 
       log.info("sent message with OneDrive file link", {
@@ -448,16 +450,30 @@ type ProactiveActivityParams = {
   serviceUrlBoundary: MSTeamsProactiveContext["sdkCloudOptions"];
 };
 
-type ProactiveActivityRawParams = Omit<ProactiveActivityParams, "errorPrefix">;
+function resolveThreadActivityId(
+  ctx: Pick<MSTeamsProactiveContext, "conversationType" | "replyStyle" | "ref">,
+): string | undefined {
+  if (ctx.conversationType !== "channel" || ctx.replyStyle !== "thread") {
+    return undefined;
+  }
+  return ctx.ref.threadId ?? ctx.ref.activityId;
+}
+
+type ProactiveActivityRawParams = Omit<ProactiveActivityParams, "errorPrefix"> & {
+  threadActivityId?: string;
+};
 
 async function sendProactiveActivityRaw({
   app,
   ref,
   activity,
   serviceUrlBoundary,
+  threadActivityId,
 }: ProactiveActivityRawParams): Promise<string> {
   const baseRef = buildConversationReference(ref);
   const response = await sendMSTeamsActivityWithReference(app, baseRef, activity, {
+    threadActivityId:
+      baseRef.conversation.conversationType === "channel" ? threadActivityId : undefined,
     serviceUrlBoundary,
   });
   return extractMessageId(response) ?? "unknown";

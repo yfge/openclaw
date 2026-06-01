@@ -18,6 +18,7 @@ const mockState = vi.hoisted(() => ({
   updateMSTeamsActivityWithReference: vi.fn(async () => ({ id: "updated" })),
   deleteMSTeamsActivityWithReference: vi.fn(async () => {}),
   uploadAndShareSharePoint: vi.fn(),
+  uploadAndShareOneDrive: vi.fn(),
   getDriveItemProperties: vi.fn(),
   buildTeamsFileInfoCard: vi.fn(),
   createMSTeamsTokenProvider: vi.fn(),
@@ -85,7 +86,7 @@ vi.mock("./runtime.js", () => ({
 vi.mock("./graph-upload.js", () => ({
   uploadAndShareSharePoint: mockState.uploadAndShareSharePoint,
   getDriveItemProperties: mockState.getDriveItemProperties,
-  uploadAndShareOneDrive: vi.fn(),
+  uploadAndShareOneDrive: mockState.uploadAndShareOneDrive,
 }));
 
 vi.mock("./graph-chat.js", () => ({
@@ -154,16 +155,19 @@ function createSharePointSendContext(params: {
   conversationId: string;
   graphChatId: string | null;
   siteId: string;
+  replyStyle?: "top-level" | "thread";
+  conversationType?: "groupChat" | "channel";
+  ref?: Record<string, unknown>;
 }) {
   return {
     app: createMockApp(),
     appId: "app-id",
     conversationId: params.conversationId,
     graphChatId: params.graphChatId,
-    ref: {},
+    ref: params.ref ?? {},
     log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-    conversationType: "groupChat" as const,
-    replyStyle: "top-level" as const,
+    conversationType: (params.conversationType ?? "groupChat") as "groupChat" | "channel",
+    replyStyle: (params.replyStyle ?? "top-level") as "top-level" | "thread",
     sdkCloudOptions: { cloud: "Public" as const },
     tokenProvider: { getAccessToken: vi.fn(async () => "token") },
     mediaMaxBytes: 8 * 1024 * 1024,
@@ -235,6 +239,7 @@ describe("sendMessageMSTeams", () => {
     mockState.updateMSTeamsActivityWithReference.mockReset();
     mockState.deleteMSTeamsActivityWithReference.mockReset();
     mockState.uploadAndShareSharePoint.mockReset();
+    mockState.uploadAndShareOneDrive.mockReset();
     mockState.getDriveItemProperties.mockReset();
     mockState.buildTeamsFileInfoCard.mockReset();
 
@@ -257,6 +262,11 @@ describe("sendMessageMSTeams", () => {
     mockState.sendMSTeamsActivityWithReference.mockResolvedValue({ id: "message-1" });
     mockState.updateMSTeamsActivityWithReference.mockResolvedValue({ id: "updated" });
     mockState.deleteMSTeamsActivityWithReference.mockResolvedValue(undefined);
+    mockState.uploadAndShareOneDrive.mockResolvedValue({
+      itemId: "onedrive-item-1",
+      shareUrl: "https://onedrive.example.com/shared/report.pdf",
+      name: "report.pdf",
+    });
   });
 
   it("loads media through shared helper and forwards mediaLocalRoots", async () => {
@@ -442,6 +452,117 @@ describe("sendMessageMSTeams", () => {
     const uploadPayload = firstObjectArg(mockState.uploadAndShareSharePoint);
     expect(uploadPayload.chatId).toBe(botFrameworkConversationId);
     expect(uploadPayload.siteId).toBe("site-456");
+  });
+
+  it("threads SharePoint file-card sends when proactive replyStyle resolves to thread", async () => {
+    mockState.resolveMSTeamsSendContext.mockResolvedValue(
+      createSharePointSendContext({
+        conversationId: "19:channel@thread.tacv2",
+        graphChatId: "19:channel@thread.tacv2",
+        siteId: "site-thread",
+        conversationType: "channel",
+        replyStyle: "thread",
+        ref: {
+          threadId: "thread-root-1",
+          conversation: { id: "19:channel@thread.tacv2", conversationType: "channel" },
+          user: { id: "user-1" },
+          agent: { id: "agent-1" },
+          serviceUrl: "https://service.example.com",
+        },
+      }),
+    );
+    mockSharePointPdfUpload({
+      bufferSize: 100,
+      fileName: "threaded.pdf",
+      itemId: "item-thread",
+      uniqueId: "{GUID-THREAD}",
+    });
+
+    await sendMessageMSTeams({
+      cfg: {} as OpenClawConfig,
+      to: "conversation:19:channel@thread.tacv2",
+      text: "threaded file",
+      mediaUrl: "https://example.com/threaded.pdf",
+    });
+
+    expect(mockState.sendMSTeamsActivityWithReference.mock.calls[0]?.[3]).toMatchObject({
+      threadActivityId: "thread-root-1",
+    });
+  });
+
+  it("does not thread SharePoint file-card sends for top-level channel replies", async () => {
+    mockState.resolveMSTeamsSendContext.mockResolvedValue(
+      createSharePointSendContext({
+        conversationId: "19:channel@thread.tacv2",
+        graphChatId: "19:channel@thread.tacv2",
+        siteId: "site-top-level",
+        conversationType: "channel",
+        replyStyle: "top-level",
+        ref: {
+          threadId: "thread-root-1",
+          conversation: { id: "19:channel@thread.tacv2", conversationType: "channel" },
+          user: { id: "user-1" },
+          agent: { id: "agent-1" },
+          serviceUrl: "https://service.example.com",
+        },
+      }),
+    );
+    mockSharePointPdfUpload({
+      bufferSize: 100,
+      fileName: "top-level.pdf",
+      itemId: "item-top-level",
+      uniqueId: "{GUID-TOP-LEVEL}",
+    });
+
+    await sendMessageMSTeams({
+      cfg: {} as OpenClawConfig,
+      to: "conversation:19:channel@thread.tacv2",
+      text: "top-level file",
+      mediaUrl: "https://example.com/top-level.pdf",
+    });
+
+    expect(mockState.sendMSTeamsActivityWithReference.mock.calls[0]?.[3]).toMatchObject({
+      threadActivityId: undefined,
+    });
+  });
+
+  it("threads OneDrive fallback file-link sends when proactive replyStyle resolves to thread", async () => {
+    mockState.resolveMSTeamsSendContext.mockResolvedValue({
+      app: createMockApp(),
+      appId: "app-id",
+      conversationId: "19:channel@thread.tacv2",
+      ref: {
+        threadId: "thread-root-2",
+        conversation: { id: "19:channel@thread.tacv2", conversationType: "channel" },
+        user: { id: "user-1" },
+        agent: { id: "agent-1" },
+        serviceUrl: "https://service.example.com",
+      },
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      conversationType: "channel",
+      replyStyle: "thread",
+      sdkCloudOptions: { cloud: "Public" },
+      tokenProvider: { getAccessToken: vi.fn(async () => "token") },
+      mediaMaxBytes: 8 * 1024 * 1024,
+      sharePointSiteId: undefined,
+    });
+    mockState.loadOutboundMediaFromUrl.mockResolvedValueOnce({
+      buffer: Buffer.from("pdf-bytes"),
+      contentType: "application/pdf",
+      fileName: "fallback.pdf",
+      kind: "file",
+    });
+
+    await sendMessageMSTeams({
+      cfg: {} as OpenClawConfig,
+      to: "conversation:19:channel@thread.tacv2",
+      text: "fallback file",
+      mediaUrl: "https://example.com/fallback.pdf",
+    });
+
+    expect(mockState.sendMSTeamsActivityWithReference.mock.calls[0]?.[3]).toMatchObject({
+      threadActivityId: "thread-root-2",
+    });
   });
 });
 
