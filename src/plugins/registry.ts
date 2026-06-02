@@ -601,36 +601,40 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     if (pluginsWithChannelRegistrationConflict.has(record.id)) {
       return;
     }
+    const names = [...(opts?.names ?? []), ...(opts?.name ? [opts.name] : [])];
+    if (typeof tool !== "function") {
+      names.push(tool.name);
+    }
+    const normalized = normalizePluginToolNames(names);
     const declaredNames = normalizePluginToolContractNames(record.contracts);
     if (declaredNames.length === 0) {
+      const rejectedNames = normalized.length > 0 ? normalized.join(", ") : "(unknown)";
+      const message = `plugin tool registration rejected (${record.id}: ${rejectedNames}); declare the tool name in contracts.tools in the plugin manifest before registering agent tools`;
+      registryParams.logger.warn(`[plugins] ${message}; source: ${record.source}`);
       pushDiagnostic({
-        level: "error",
+        level: "warn",
         pluginId: record.id,
         source: record.source,
-        message: "plugin must declare contracts.tools before registering agent tools",
+        message,
       });
       return;
     }
-    const names = [...(opts?.names ?? []), ...(opts?.name ? [opts.name] : [])];
     const optional = opts?.optional === true;
     const factory: OpenClawPluginToolFactory =
       typeof tool === "function" ? tool : (_ctx: OpenClawPluginToolContext) => tool;
 
-    if (typeof tool !== "function") {
-      names.push(tool.name);
-    }
-
-    const normalized = normalizePluginToolNames(names);
     const undeclared = findUndeclaredPluginToolNames({
       declaredNames,
       toolNames: normalized,
     });
     if (undeclared.length > 0) {
+      const message = `plugin tool registration rejected (${record.id}: ${undeclared.join(", ")}); declare the tool name in contracts.tools in the plugin manifest before registering agent tools`;
+      registryParams.logger.warn(`[plugins] ${message}; source: ${record.source}`);
       pushDiagnostic({
-        level: "error",
+        level: "warn",
         pluginId: record.id,
         source: record.source,
-        message: `plugin must declare contracts.tools for: ${undeclared.join(", ")}`,
+        message,
       });
       return;
     }

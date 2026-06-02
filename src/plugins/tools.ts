@@ -1291,10 +1291,10 @@ export function resolvePluginTools(params: {
           })
         : [];
       if (undeclared.length > 0) {
-        const message = `plugin tool is undeclared (${entry.pluginId}): ${undeclared.join(", ")}`;
-        context.logger.error(message);
+        const message = `plugin tool rejected (${entry.pluginId}: ${undeclared.join(", ")}); declare the tool name in contracts.tools in the plugin manifest`;
+        context.logger.warn(`${message}; source: ${entry.source}`);
         registry.diagnostics.push({
-          level: "error",
+          level: "warn",
           pluginId: entry.pluginId,
           source: entry.source,
           message,

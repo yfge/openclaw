@@ -2305,7 +2305,10 @@ describe("resolvePluginTools optional tools", () => {
     const tools = resolvePluginTools(createResolveToolsParams());
 
     expectResolvedToolNames(tools, ["declared_tool"]);
-    expectSingleDiagnosticMessage(registry.diagnostics, "plugin tool is undeclared");
+    expectSingleDiagnosticMessage(
+      registry.diagnostics,
+      "plugin tool rejected (dynamic-owner: rogue_tool); declare the tool name in contracts.tools in the plugin manifest",
+    );
   });
 
   it("skips allowlisted optional malformed plugin tools", () => {

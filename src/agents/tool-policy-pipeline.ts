@@ -218,15 +218,19 @@ function describeUnknownAllowlistSuffix(params: {
   const unavailableCoreDetail = unavailableCoreToolReason
     ? `These entries are shipped core tools but unavailable here: ${unavailableCoreToolReason}.`
     : "These entries are shipped core tools but unavailable in the current runtime/provider/model/config.";
+  const pluginToolContractDetail =
+    "If another entry is a plugin tool, ensure the plugin manifest declares it in contracts.tools.";
   const mixedUnavailableCoreDetail = unavailableCoreToolReason
-    ? `Some entries are shipped core tools but unavailable here: ${unavailableCoreToolReason}; other entries won't match any tool unless the plugin is enabled.`
-    : "Some entries are shipped core tools but unavailable in the current runtime/provider/model/config; other entries won't match any tool unless the plugin is enabled.";
+    ? `Some entries are shipped core tools but unavailable here: ${unavailableCoreToolReason}; other entries won't match any tool unless the plugin is enabled. ${pluginToolContractDetail}`
+    : `Some entries are shipped core tools but unavailable in the current runtime/provider/model/config; other entries won't match any tool unless the plugin is enabled. ${pluginToolContractDetail}`;
+  const pluginOnlyToolContractDetail =
+    " If this is a plugin tool, ensure the plugin manifest declares it in contracts.tools.";
   const detail =
     params.hasGatedCoreEntries && params.hasOtherEntries
       ? mixedUnavailableCoreDetail
       : params.hasGatedCoreEntries
         ? unavailableCoreDetail
-        : "These entries won't match any tool unless the plugin is enabled.";
+        : `These entries won't match any tool unless the plugin is enabled.${pluginOnlyToolContractDetail}`;
   return preface ? `${preface} ${detail}` : detail;
 }
 

@@ -60,6 +60,7 @@ Docs: https://docs.openclaw.ai
 - CLI/desktop: bridge WSL clipboard operations through the shell and recognize manual-update launchd jobs. (#88764)
 - Plugins: make PixVerse external-plugin ClawHub metadata explicit and keep it out of bundled dist builds.
 - Plugins: clarify plugin loader failure guidance so missing or incompatible plugin packages point operators at the right repair path.
+- Plugins: warn when a runtime-registered tool is rejected because the plugin manifest omits `contracts.tools`, and point allowlist warnings at the same manifest fix.
 - Plugins: preserve npm plugin roots after blocked installs, skip plugin-local `openclaw` peer symlinks during rollback snapshots, relink those peers after restore, isolate cached tool runtime siblings, and isolate web-provider factory failures so one bad plugin does not poison sibling runtime paths. (#77237, #88807)
 - Cron: keep SQLite cron migrations compatible with legacy run-log tables, archived job stores, diagnostic cron names, and legacy one-shot delete-after-run behavior. (#88285)
 - Cron: keep update delivery validation scoped, harden restart state, and retire MCP runtimes on isolated cron cleanup.

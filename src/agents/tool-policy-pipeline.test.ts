@@ -89,7 +89,7 @@ describe("tool-policy-pipeline", () => {
       ],
     });
     expect(warnings).toEqual([
-      "tools: tools.allow allowlist contains unknown entries (wat). These entries won't match any tool unless the plugin is enabled.",
+      "tools: tools.allow allowlist contains unknown entries (wat). These entries won't match any tool unless the plugin is enabled. If this is a plugin tool, ensure the plugin manifest declares it in contracts.tools.",
     ]);
   });
 
@@ -131,7 +131,7 @@ describe("tool-policy-pipeline", () => {
         "memory-triggered compaction runs expose only read and append-only write",
     });
     expect(warnings).toEqual([
-      "tools: tools.allow allowlist contains unknown entries (apply_patch, wat). Some entries are shipped core tools but unavailable here: memory-triggered compaction runs expose only read and append-only write; other entries won't match any tool unless the plugin is enabled.",
+      "tools: tools.allow allowlist contains unknown entries (apply_patch, wat). Some entries are shipped core tools but unavailable here: memory-triggered compaction runs expose only read and append-only write; other entries won't match any tool unless the plugin is enabled. If another entry is a plugin tool, ensure the plugin manifest declares it in contracts.tools.",
     ]);
   });
 
@@ -252,8 +252,8 @@ describe("tool-policy-pipeline", () => {
     });
 
     expect(warnings).toEqual([
-      "tools: tools.allow allowlist contains unknown entries (unknown_256). These entries won't match any tool unless the plugin is enabled.",
-      "tools: tools.allow allowlist contains unknown entries (unknown_0). These entries won't match any tool unless the plugin is enabled.",
+      "tools: tools.allow allowlist contains unknown entries (unknown_256). These entries won't match any tool unless the plugin is enabled. If this is a plugin tool, ensure the plugin manifest declares it in contracts.tools.",
+      "tools: tools.allow allowlist contains unknown entries (unknown_0). These entries won't match any tool unless the plugin is enabled. If this is a plugin tool, ensure the plugin manifest declares it in contracts.tools.",
     ]);
   });
 
