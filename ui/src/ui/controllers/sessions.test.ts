@@ -2012,7 +2012,7 @@ describe("applySessionsChangedEvent", () => {
     expect(state.sessionsResult?.sessions[0]?.model).toBe("gpt-5.4");
   });
 
-  it("clears old token totals when the gateway marks the measurement stale", () => {
+  it("keeps last known token totals when the gateway marks the measurement stale", () => {
     const state = createState(async () => undefined, {
       sessionsResult: {
         ts: 1,
@@ -2039,7 +2039,7 @@ describe("applySessionsChangedEvent", () => {
       contextTokens: 200_000,
     });
 
-    expect(state.sessionsResult?.sessions[0]?.totalTokens).toBeUndefined();
+    expect(state.sessionsResult?.sessions[0]?.totalTokens).toBe(190_000);
     expect(state.sessionsResult?.sessions[0]?.totalTokensFresh).toBe(false);
     expect(state.sessionsResult?.sessions[0]?.contextTokens).toBe(200_000);
   });

@@ -2381,7 +2381,6 @@ export function buildGatewaySessionInfo(params: {
     modelCatalog: params.modelCatalog,
     now,
     storeChildSessionsByKey,
-    skipTranscriptUsageFallback: true,
     lightweightListRow: true,
   });
 }

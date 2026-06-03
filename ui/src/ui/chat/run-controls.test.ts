@@ -396,8 +396,26 @@ describe("context notice", () => {
         200_000,
       ),
     ).toBeNull();
-    expect(
-      getContextNoticeViewModel(
+    const staleUsage = getContextNoticeViewModel(
+      {
+        key: "main",
+        kind: "direct",
+        updatedAt: null,
+        totalTokens: 190_000,
+        totalTokensFresh: false,
+        contextTokens: 200_000,
+      },
+      200_000,
+    );
+    expect(staleUsage).toMatchObject({
+      pct: 95,
+      detail: "~190k / 200k",
+      warning: true,
+      compactRecommended: true,
+      stale: true,
+    });
+    render(
+      renderContextNotice(
         {
           key: "main",
           kind: "direct",
@@ -408,7 +426,12 @@ describe("context notice", () => {
         },
         200_000,
       ),
-    ).toBeNull();
+      container,
+    );
+    expect(container.querySelector(".context-notice__detail")?.textContent).toBe("~190k / 200k");
+    expect(container.querySelector(".context-notice")?.getAttribute("title")).toBe(
+      "Last known context usage: ~190k / 200k (95%)",
+    );
   });
 });
 

@@ -660,36 +660,25 @@ describe("listSessionsFromStore search", () => {
     });
   });
 
-  test("chat history session metadata keeps model-derived contextTokens without transcript usage", () => {
+  test("chat history session metadata derives selected-session transcript usage", () => {
     withAnthropicTranscriptFixture({
       prefix: "openclaw-session-info-context-",
       run: ({ storePath, now }) => {
+        const entry = zeroUsageTranscriptEntry(now, {
+          modelProvider: "anthropic",
+          model: ANTHROPIC_MODEL,
+        });
         const row = buildGatewaySessionInfo({
-          cfg: {
-            models: {
-              providers: {
-                "local-test": {
-                  models: [{ id: "test-model", contextTokens: 123_456 }],
-                },
-              },
-            },
-          } as unknown as OpenClawConfig,
+          cfg: createAnthropicContext1mConfig(),
           storePath,
           key: MAIN_SESSION_KEY,
-          store: {
-            [MAIN_SESSION_KEY]: {
-              sessionId: MAIN_SESSION_ID,
-              updatedAt: now,
-              modelProvider: "local-test",
-              model: "test-model",
-            } as SessionEntry,
-          },
+          store: { [MAIN_SESSION_KEY]: entry },
+          entry,
         });
 
-        expect(row.totalTokens).toBeUndefined();
-        expect(row.totalTokensFresh).toBe(false);
-        expect(row.estimatedCostUsd).toBeUndefined();
-        expect(row.contextTokens).toBe(123_456);
+        expect(row.totalTokens).toBe(TRANSCRIPT_TOTAL_TOKENS);
+        expect(row.totalTokensFresh).toBe(true);
+        expect(row.contextTokens).toBe(ANTHROPIC_CONTEXT_TOKENS);
       },
     });
   });

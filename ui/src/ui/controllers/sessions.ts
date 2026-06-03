@@ -786,9 +786,6 @@ export function applySessionsChangedEvent(
       nextRow.hasActiveRun = false;
     }
   }
-  if (nextRow.totalTokensFresh === false && !hasOwn(source, "totalTokens")) {
-    delete nextRow.totalTokens;
-  }
   if (!matchesResultScope) {
     return upsertCachedChatAgentSessionRow(state, nextRow)
       ? { applied: true, change: existingIndex >= 0 ? "updated" : "inserted" }

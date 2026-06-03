@@ -61,26 +61,27 @@ export function getContextNoticeViewModel(
   bg: string;
   warning: boolean;
   compactRecommended: boolean;
+  stale: boolean;
 } | null {
-  if (session?.totalTokensFresh === false) {
-    return null;
-  }
   const used = session?.totalTokens;
   const limit = session?.contextTokens ?? defaultContextTokens ?? 0;
   if (typeof used !== "number" || !Number.isFinite(used) || used < 0 || !limit) {
     return null;
   }
+  const stale = session?.totalTokensFresh === false;
   const ratio = used / limit;
   const pct = Math.min(Math.round(ratio * 100), 100);
+  const detail = `${stale ? "~" : ""}${formatTokensCompact(used)} / ${formatTokensCompact(limit)}`;
   const warning = ratio >= CONTEXT_NOTICE_RATIO;
   if (!warning) {
     return {
       pct,
-      detail: `${formatTokensCompact(used)} / ${formatTokensCompact(limit)}`,
+      detail,
       color: "var(--muted)",
       bg: "color-mix(in srgb, var(--muted) 8%, transparent)",
       warning,
       compactRecommended: false,
+      stale,
     };
   }
   // Read theme semantic tokens so color tracks the active theme (Dash, dark, light ...).
@@ -96,11 +97,12 @@ export function getContextNoticeViewModel(
   const bg = `rgba(${r}, ${g}, ${b}, ${bgOpacity})`;
   return {
     pct,
-    detail: `${formatTokensCompact(used)} / ${formatTokensCompact(limit)}`,
+    detail,
     color,
     bg,
     warning,
     compactRecommended: ratio >= CONTEXT_COMPACT_RATIO,
+    stale,
   };
 }
 
@@ -120,7 +122,7 @@ export function renderContextNotice(
       class="context-notice ${model.warning ? "context-notice--warning" : "context-notice--usage"}"
       role="status"
       style="--ctx-color:${model.color};--ctx-bg:${model.bg}"
-      title=${`Session context usage: ${model.detail} (${model.pct}%)`}
+      title=${`${model.stale ? "Last known" : "Session"} context usage: ${model.detail} (${model.pct}%)`}
     >
       ${model.warning
         ? html`
