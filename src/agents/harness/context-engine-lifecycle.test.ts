@@ -102,7 +102,7 @@ describe("harness context engine lifecycle", () => {
 
     const afterTurnCalls = (afterTurn as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     const afterTurnParams = afterTurnCalls[0]?.[0] as
-      | { messages?: AgentMessage[]; prePromptMessageCount?: number }
+      | { messages?: AgentMessage[]; prePromptMessageCount?: number; isHeartbeat?: boolean }
       | undefined;
     expect(afterTurnParams?.messages).toEqual([
       beforePromptUser,
@@ -111,6 +111,34 @@ describe("harness context engine lifecycle", () => {
       turnAssistant,
     ]);
     expect(afterTurnParams?.prePromptMessageCount).toBe(2);
+    expect(afterTurnParams?.isHeartbeat).toBeUndefined();
+  });
+
+  it("forwards heartbeat turns to afterTurn hooks", async () => {
+    const beforePromptUser = textMessage("user", "old ask", 1);
+    const turnAssistant = textMessage("assistant", "heartbeat ack", 2);
+    const afterTurn = vi.fn(async () => {});
+
+    await finalizeHarnessContextEngineTurn({
+      contextEngine: createContextEngine({ afterTurn }),
+      promptError: false,
+      aborted: false,
+      yieldAborted: false,
+      isHeartbeat: true,
+      sessionIdUsed: sessionParams.sessionIdUsed,
+      sessionKey: sessionParams.sessionKey,
+      sessionFile: sessionParams.sessionFile,
+      messagesSnapshot: [beforePromptUser, turnAssistant],
+      prePromptMessageCount: 1,
+      tokenBudget: 2048,
+      runtimeContext: {},
+      runMaintenance: async () => undefined,
+      warn: () => {},
+    });
+
+    const afterTurnParams = (afterTurn as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls[0]?.[0] as { isHeartbeat?: boolean } | undefined;
+    expect(afterTurnParams?.isHeartbeat).toBe(true);
   });
 
   describe("assembleHarnessContextEngine result validation", () => {

@@ -261,6 +261,7 @@ async function finalizeCliContextEngineTurn(params: {
     promptError: false,
     aborted: runParams.abortSignal?.aborted === true,
     yieldAborted: false,
+    isHeartbeat: runParams.trigger === "heartbeat",
     sessionIdUsed: runParams.sessionId,
     sessionKey: runParams.sessionKey,
     sessionFile: runParams.sessionFile,

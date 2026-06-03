@@ -496,6 +496,7 @@ describe("installContextEngineLoopHook", () => {
       prePromptMessageCount: number;
     }) => Record<string, unknown> | undefined,
     onAfterTurnCheckpoint?: (messageCount: number) => void,
+    isHeartbeat?: boolean,
   ): () => void {
     return installContextEngineLoopHook({
       agent,
@@ -508,6 +509,7 @@ describe("installContextEngineLoopHook", () => {
       ...(prePromptCount !== undefined ? { getPrePromptMessageCount: () => prePromptCount } : {}),
       ...(getRuntimeContext ? { getRuntimeContext } : {}),
       ...(onAfterTurnCheckpoint ? { onAfterTurnCheckpoint } : {}),
+      ...(isHeartbeat !== undefined ? { isHeartbeat } : {}),
     });
   }
 
@@ -626,7 +628,20 @@ describe("installContextEngineLoopHook", () => {
     const afterTurnParams = recordMockArg(engine.afterTurn);
     expect(afterTurnParams?.prePromptMessageCount).toBe(1);
     expect(afterTurnParams?.messages).toBe(messages);
+    expect(afterTurnParams?.isHeartbeat).toBeUndefined();
     expect(engine.assemble).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards heartbeat turns to loop-hook afterTurn calls", async () => {
+    const agent = makeGuardableAgent();
+    const engine = makeMockEngine();
+    installHook(agent, engine, 1, undefined, undefined, true);
+
+    const messages = [makeUser("first"), makeToolResult("call_1", "result")];
+    await callTransform(agent, messages);
+
+    expect(engine.afterTurn).toHaveBeenCalledTimes(1);
+    expect(recordMockArg(engine.afterTurn).isHeartbeat).toBe(true);
   });
 
   it("passes runtimeContext through loop-hook afterTurn calls", async () => {

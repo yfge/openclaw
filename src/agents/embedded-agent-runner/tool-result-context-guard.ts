@@ -322,6 +322,7 @@ export function installContextEngineLoopHook(params: {
   sessionId: string;
   sessionKey?: string;
   sessionFile: string;
+  isHeartbeat?: boolean;
   tokenBudget?: number;
   modelId: string;
   getPrePromptMessageCount?: () => number;
@@ -389,6 +390,7 @@ export function installContextEngineLoopHook(params: {
           sessionFile,
           messages: transcriptMessages,
           prePromptMessageCount,
+          isHeartbeat: params.isHeartbeat,
           tokenBudget,
           runtimeContext: params.getRuntimeContext?.({
             messages: transcriptMessages,
