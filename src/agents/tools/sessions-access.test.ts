@@ -278,7 +278,7 @@ describe("createSessionVisibilityGuard", () => {
       allowed: false,
       status: "forbidden",
       error:
-        "Session list visibility is restricted. Set tools.sessions.visibility=all to allow cross-agent access.",
+        "Session list visibility is restricted. Set tools.sessions.visibility=all and enable tools.agentToAgent with an allowlist that includes both agents.",
     });
   });
 
@@ -340,7 +340,7 @@ describe("createSessionVisibilityGuard", () => {
       allowed: false,
       status: "forbidden",
       error:
-        "Session history visibility is restricted. Set tools.sessions.visibility=all to allow cross-agent access.",
+        "Session history visibility is restricted. Set tools.sessions.visibility=all and enable tools.agentToAgent with an allowlist that includes both agents.",
     });
   });
 
@@ -439,6 +439,22 @@ describe("createSessionVisibilityGuard", () => {
       status: "forbidden",
       error:
         "Agent-to-agent messaging is disabled. Set tools.agentToAgent.enabled=true to allow cross-agent sends.",
+    });
+  });
+
+  it("mentions both controls when cross-agent send is blocked by visibility", async () => {
+    const guard = await createSessionVisibilityGuard({
+      action: "send",
+      requesterSessionKey: "agent:main:main",
+      visibility: "tree",
+      a2aPolicy: createAgentToAgentPolicy({} as unknown as OpenClawConfig),
+    });
+
+    expect(guard.check("agent:ops:main")).toEqual({
+      allowed: false,
+      status: "forbidden",
+      error:
+        "Session send visibility is restricted. Set tools.sessions.visibility=all and enable tools.agentToAgent with an allowlist that includes both agents.",
     });
   });
 
