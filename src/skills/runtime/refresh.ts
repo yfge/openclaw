@@ -397,11 +397,21 @@ export function shouldIgnoreSkillsWatchPath(
   if (stats?.isDirectory?.() || stats?.isSymbolicLink?.()) {
     return false;
   }
-  if (!stats) {
+  return false;
+}
+
+export function shouldScheduleSkillsWatchEvent(params: {
+  event: "add" | "change" | "unlink" | "unlinkDir";
+  watchPath: string;
+}): boolean {
+  if (DEFAULT_SKILLS_WATCH_IGNORED.some((re) => re.test(params.watchPath))) {
     return false;
   }
-  const normalized = watchPath.replaceAll("\\", "/");
-  return path.posix.basename(normalized) !== "SKILL.md";
+  if (params.event === "unlinkDir") {
+    return true;
+  }
+  const normalized = params.watchPath.replaceAll("\\", "/");
+  return path.posix.basename(normalized) === "SKILL.md";
 }
 
 function resolveWatchDebounceMs(config?: OpenClawConfig): number {
@@ -466,10 +476,26 @@ function createSkillsPathWatcher(target: WatchTarget, debounceMs: number): Skill
     }, debounceMs);
   };
 
-  watcher.on("add", (p) => schedule(p));
-  watcher.on("change", (p) => schedule(p));
-  watcher.on("unlink", (p) => schedule(p));
-  watcher.on("unlinkDir", (p) => schedule(p));
+  watcher.on("add", (p) => {
+    if (shouldScheduleSkillsWatchEvent({ event: "add", watchPath: p })) {
+      schedule(p);
+    }
+  });
+  watcher.on("change", (p) => {
+    if (shouldScheduleSkillsWatchEvent({ event: "change", watchPath: p })) {
+      schedule(p);
+    }
+  });
+  watcher.on("unlink", (p) => {
+    if (shouldScheduleSkillsWatchEvent({ event: "unlink", watchPath: p })) {
+      schedule(p);
+    }
+  });
+  watcher.on("unlinkDir", (p) => {
+    if (shouldScheduleSkillsWatchEvent({ event: "unlinkDir", watchPath: p })) {
+      schedule(p);
+    }
+  });
   watcher.on("error", (err) => {
     log.warn(`skills watcher error (${target.path}): ${String(err)}`);
   });

@@ -57,7 +57,7 @@ describe("ensureSkillsWatcher", () => {
     await refreshModule.resetSkillsRefreshForTest();
   });
 
-  it("watches skill roots and filters non-skill churn", async () => {
+  it("watches skill roots but only reacts to skill file events", async () => {
     const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-watch-root-"));
     try {
       refreshModule.ensureSkillsWatcher({ workspaceDir });
@@ -100,12 +100,31 @@ describe("ensureSkillsWatcher", () => {
       expect(ignored("/tmp/workspace/skills/build/output.js")).toBe(true);
       expect(ignored("/tmp/workspace/skills/.cache/data.json")).toBe(true);
 
-      // Should NOT ignore normal skill files
+      // Should NOT ignore normal skill files or sibling files at the chokidar layer.
       expect(ignored("/tmp/.hidden/skills/index.md")).toBe(false);
       expect(ignored("/tmp/workspace/skills/my-skill", { isDirectory: () => true })).toBe(false);
       expect(ignored("/tmp/workspace/skills/my-skill", { isSymbolicLink: () => true })).toBe(false);
-      expect(ignored("/tmp/workspace/skills/my-skill/README.md", {})).toBe(true);
+      expect(ignored("/tmp/workspace/skills/my-skill/README.md", {})).toBe(false);
       expect(ignored("/tmp/workspace/skills/my-skill/SKILL.md", {})).toBe(false);
+
+      expect(
+        refreshModule.shouldScheduleSkillsWatchEvent({
+          event: "change",
+          watchPath: "/tmp/workspace/skills/my-skill/README.md",
+        }),
+      ).toBe(false);
+      expect(
+        refreshModule.shouldScheduleSkillsWatchEvent({
+          event: "change",
+          watchPath: "/tmp/workspace/skills/my-skill/SKILL.md",
+        }),
+      ).toBe(true);
+      expect(
+        refreshModule.shouldScheduleSkillsWatchEvent({
+          event: "unlinkDir",
+          watchPath: "/tmp/workspace/skills/my-skill",
+        }),
+      ).toBe(true);
     } finally {
       await fs.rm(workspaceDir, { recursive: true, force: true });
     }
@@ -142,6 +161,36 @@ describe("ensureSkillsWatcher", () => {
           changedPath,
         },
       ]);
+    } finally {
+      await fs.rm(workspaceDir, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores non-skill file churn at event time", async () => {
+    vi.useFakeTimers();
+    const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-watch-filter-"));
+    const seen: SkillsChangeEvent[] = [];
+    try {
+      refreshModule.registerSkillsChangeListener((change) => {
+        seen.push(change);
+      });
+      refreshModule.ensureSkillsWatcher({
+        workspaceDir,
+        config: { skills: { load: { watchDebounceMs: 10 } } },
+      });
+
+      const calls = watchMock.mock.calls as unknown as Array<
+        [string, { depth?: number; ignored?: unknown }]
+      >;
+      const workspaceSkillsRoot = path.join(workspaceDir, "skills").replaceAll("\\", "/");
+      const watcherIndex = calls.findIndex(
+        ([p]) => p.replaceAll("\\", "/") === workspaceSkillsRoot,
+      );
+      const readmePath = path.join(workspaceDir, "skills", "demo", "README.md");
+      createdWatchers[watcherIndex]?.emit("change", readmePath);
+      await vi.advanceTimersByTimeAsync(10);
+
+      expect(seen).toEqual([]);
     } finally {
       await fs.rm(workspaceDir, { recursive: true, force: true });
     }
