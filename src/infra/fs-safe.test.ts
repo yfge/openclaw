@@ -1,4 +1,5 @@
 // Tests safe filesystem wrappers and protected file-handle behavior.
+import fsSync from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -17,6 +18,7 @@ import {
   root as openRoot,
   writeExternalFileWithinRoot,
 } from "./fs-safe.js";
+import { appendRegularFile, appendRegularFileSync } from "./regular-file.js";
 
 const tempDirs = createTrackedTempDirs();
 
@@ -121,6 +123,37 @@ async function setupSymlinkWriteRaceFixture(options?: { seedInsideTarget?: boole
 }
 
 describe("fs-safe", () => {
+  it("appends when descriptor chmod is rejected by the filesystem", async () => {
+    const dir = await tempDirs.make("openclaw-fs-safe-append-chmod-");
+    const filePath = path.join(dir, "events.jsonl");
+    await fs.writeFile(filePath, "before\n");
+
+    const handle = await fs.open(filePath, "a");
+    const chmodSpy = vi
+      .spyOn(Object.getPrototypeOf(handle) as FileHandle, "chmod")
+      .mockRejectedValue(Object.assign(new Error("operation not permitted"), { code: "EPERM" }));
+    await handle.close();
+
+    await appendRegularFile({ filePath, content: "after\n" });
+
+    expect(await fs.readFile(filePath, "utf8")).toBe("before\nafter\n");
+    expect(chmodSpy).toHaveBeenCalledWith(0o600);
+  });
+
+  it("appends synchronously when descriptor chmod is rejected by the filesystem", async () => {
+    const dir = await tempDirs.make("openclaw-fs-safe-append-chmod-sync-");
+    const filePath = path.join(dir, "events.jsonl");
+    await fs.writeFile(filePath, "before\n");
+    const chmodSpy = vi.spyOn(fsSync, "fchmodSync").mockImplementation(() => {
+      throw Object.assign(new Error("operation not permitted"), { code: "EPERM" });
+    });
+
+    appendRegularFileSync({ filePath, content: "after\n" });
+
+    expect(await fs.readFile(filePath, "utf8")).toBe("before\nafter\n");
+    expect(chmodSpy).toHaveBeenCalledWith(expect.any(Number), 0o600);
+  });
+
   it("reads a local file safely", async () => {
     const dir = await tempDirs.make("openclaw-fs-safe-");
     const file = path.join(dir, "payload.txt");

@@ -27,14 +27,16 @@ export { pathExists, pathExistsSync } from "@openclaw/fs-safe/advanced";
 export { movePathToTrash, type MovePathToTrashOptions } from "@openclaw/fs-safe/advanced";
 export { readLocalFileFromRoots, resolveLocalPathFromRootsSync } from "@openclaw/fs-safe/advanced";
 export {
-  appendRegularFile,
-  appendRegularFileSync,
   readRegularFile,
   readRegularFileSync,
-  resolveRegularFileAppendFlags,
   statRegularFile,
   statRegularFileSync,
 } from "@openclaw/fs-safe/advanced";
+export {
+  appendRegularFile,
+  appendRegularFileSync,
+  resolveRegularFileAppendFlags,
+} from "./regular-file.js";
 export {
   openLocalFileSafely,
   readLocalFileSafely,
