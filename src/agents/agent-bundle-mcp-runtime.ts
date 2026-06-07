@@ -765,7 +765,6 @@ export function createSessionMcpRuntime(params: {
         }
         released = true;
         activeLeases = Math.max(0, activeLeases - 1);
-        lastUsedAt = Date.now();
       };
     },
     getCatalog,

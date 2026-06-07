@@ -12,6 +12,7 @@ import {
   materializeBundleMcpToolsForRun,
   retireSessionMcpRuntime,
   retireSessionMcpRuntimeForSessionKey,
+  createSessionMcpRuntime,
 } from "./agent-bundle-mcp-tools.js";
 import type { SessionMcpRuntime } from "./agent-bundle-mcp-types.js";
 import { writeExecutable } from "./bundle-mcp-shared.test-harness.js";
@@ -280,6 +281,7 @@ function makeRuntime(
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await cleanupBundleMcpHarness();
 });
 
@@ -1569,35 +1571,15 @@ process.on("SIGINT", shutdown);`,
   it("evicts idle runtimes after the configured TTL but skips active leases", async () => {
     let now = 1_000;
     const disposed: string[] = [];
+    vi.spyOn(Date, "now").mockImplementation(() => now);
     const createRuntime: RuntimeFactory = (params) => {
-      let lastUsedAt = now;
-      let activeLeases = 0;
-      return {
-        ...makeRuntime([{ toolName: "bundle_probe", description: "Bundle MCP probe" }]),
-        sessionId: params.sessionId,
-        sessionKey: params.sessionKey,
-        workspaceDir: params.workspaceDir,
-        configFingerprint: params.configFingerprint ?? "fingerprint",
-        get lastUsedAt() {
-          return lastUsedAt;
-        },
-        get activeLeases() {
-          return activeLeases;
-        },
-        markUsed: () => {
-          lastUsedAt = now;
-        },
-        acquireLease: () => {
-          activeLeases += 1;
-          return () => {
-            activeLeases -= 1;
-            lastUsedAt = now;
-          };
-        },
-        dispose: async () => {
-          disposed.push(params.sessionId);
-        },
+      const runtime = createSessionMcpRuntime(params);
+      const dispose = runtime.dispose;
+      runtime.dispose = async () => {
+        disposed.push(params.sessionId);
+        await dispose();
       };
+      return runtime;
     };
     const manager = testing.createSessionMcpRuntimeManager({
       createRuntime,
@@ -1618,7 +1600,6 @@ process.on("SIGINT", shutdown);`,
     expect(manager.listSessionIds()).toEqual(["session-idle"]);
 
     releaseLease?.();
-    now += 60;
     await expect(manager.sweepIdleRuntimes()).resolves.toBe(1);
 
     expect(disposed).toEqual(["session-idle"]);
