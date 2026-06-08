@@ -528,6 +528,18 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     expect(sendMarkdownCardFeishuMock).not.toHaveBeenCalled();
   });
 
+  it("routes paragraph-break replies through cards in non-streaming auto mode", async () => {
+    const options = setupNonStreamingAutoDispatcher();
+    await options.deliver({ text: "first paragraph\n\nsecond paragraph" }, { kind: "final" });
+
+    expect(streamingInstances).toHaveLength(0);
+    expect(sendStructuredCardFeishuMock).toHaveBeenCalledTimes(1);
+    expectMockArgFields(sendStructuredCardFeishuMock, "structured card params", {
+      text: "first paragraph\n\nsecond paragraph",
+    });
+    expect(sendMessageFeishuMock).not.toHaveBeenCalled();
+  });
+
   it("does not attach automatic mentions to non-streaming plain text replies", async () => {
     useNonStreamingAutoAccount();
 

@@ -30,6 +30,7 @@ import { deliverCommentThreadText } from "./drive.js";
 import { sendMediaFeishu, shouldSuppressFeishuTextForVoiceMedia } from "./media.js";
 import { chunkTextForOutbound, type ChannelOutboundAdapter } from "./outbound-runtime-api.js";
 import { buildFeishuPresentationCardElements } from "./presentation-card.js";
+import { shouldUseFeishuCardForText } from "./render-routing.js";
 import {
   resolveFeishuCardTemplate,
   sendCardFeishu,
@@ -79,10 +80,6 @@ function normalizePossibleLocalImagePath(text: string | undefined): string | nul
   }
 
   return raw;
-}
-
-function shouldUseCard(text: string): boolean {
-  return /```[\s\S]*?```/.test(text) || /\|.+\|[\r\n]+\|[-:| ]+\|/.test(text);
 }
 
 function markRenderedFeishuCard(card: Record<string, unknown>): Record<string, unknown> {
@@ -448,7 +445,7 @@ async function sendOutboundText(params: {
   const account = resolveFeishuAccount({ cfg, accountId });
   const renderMode = account.config?.renderMode ?? "auto";
 
-  if (renderMode === "card" || (renderMode === "auto" && shouldUseCard(text))) {
+  if (renderMode === "card" || (renderMode === "auto" && shouldUseFeishuCardForText(text))) {
     return sendMarkdownCardFeishu({
       cfg,
       to,
@@ -612,7 +609,8 @@ export const feishuOutbound: ChannelOutboundAdapter = {
 
       const account = resolveFeishuAccount({ cfg, accountId: accountId ?? undefined });
       const renderMode = account.config?.renderMode ?? "auto";
-      const useCard = renderMode === "card" || (renderMode === "auto" && shouldUseCard(text));
+      const useCard =
+        renderMode === "card" || (renderMode === "auto" && shouldUseFeishuCardForText(text));
       if (useCard) {
         const header = identity
           ? {

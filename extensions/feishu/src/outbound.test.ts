@@ -359,6 +359,21 @@ describe("feishuOutbound.sendText local-image auto-convert", () => {
     expectFeishuResult(result, "card_msg");
   });
 
+  it("routes paragraph-break text through cards in auto mode", async () => {
+    const result = await sendText({
+      cfg: emptyConfig,
+      to: "chat_1",
+      text: "first paragraph\n\nsecond paragraph",
+      accountId: "main",
+    });
+
+    expect(sendStructuredCardCall()?.to).toBe("chat_1");
+    expect(sendStructuredCardCall()?.text).toBe("first paragraph\n\nsecond paragraph");
+    expect(sendStructuredCardCall()?.accountId).toBe("main");
+    expect(sendMessageFeishuMock).not.toHaveBeenCalled();
+    expectFeishuResult(result, "card_msg");
+  });
+
   it("forwards replyToId as replyToMessageId on sendText", async () => {
     await sendText({
       cfg: emptyConfig,
@@ -1191,8 +1206,9 @@ describe("feishuOutbound.sendMedia replyToId forwarding", () => {
       accountId: "main",
     });
 
-    expect(sendMessageFeishuMock).toHaveBeenCalledTimes(1);
-    expect(sendMessageCall()?.text).toBe("spoken reply\n\n📎 https://example.com/reply.mp3");
+    expect(sendMarkdownCardFeishuMock).toHaveBeenCalledTimes(1);
+    expect(sendMarkdownCardCall()?.text).toBe("spoken reply\n\n📎 https://example.com/reply.mp3");
+    expect(sendMessageFeishuMock).not.toHaveBeenCalled();
   });
 
   it("forwards replyToId to text caption send", async () => {
