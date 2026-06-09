@@ -160,6 +160,37 @@ describe("handleSendChat", () => {
     expect(onSlashAction).toHaveBeenCalledWith("refresh-tools-effective");
   });
 
+  it("preserves typed /reset soft dispatch without confirmation", async () => {
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirm);
+    const request = vi.fn(async (method: string, params?: unknown) => {
+      if (method === "chat.send") {
+        return { runId: (params as { idempotencyKey?: string } | undefined)?.idempotencyKey };
+      }
+      if (method === "chat.history") {
+        return { messages: [], thinkingLevel: null };
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    const host = makeHost({
+      client: { request } as unknown as ChatHost["client"],
+      chatMessage: "/reset soft keep transcript",
+      sessionKey: "agent:main",
+    });
+
+    await handleSendChat(host);
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledWith(
+      "chat.send",
+      expect.objectContaining({
+        sessionKey: "agent:main",
+        message: "/reset soft keep transcript",
+      }),
+    );
+    expect(host.chatMessage).toBe("");
+  });
+
   it("shows a visible pending item for /steer on the active run", async () => {
     vi.doMock("./chat/slash-command-executor.ts", async () => {
       const actual = await vi.importActual<typeof import("./chat/slash-command-executor.ts")>(

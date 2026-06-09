@@ -70,6 +70,9 @@ function isChatResetCommand(text: string) {
     return false;
   }
   const normalized = trimmed.toLowerCase();
+  if (/^\/reset\s+soft(?:\s|$)/u.test(normalized)) {
+    return false;
+  }
   if (normalized === "/new" || normalized === "/reset") {
     return true;
   }
@@ -309,7 +312,7 @@ async function dispatchSlashCommand(
       });
       return;
     case "reset":
-      await sendChatMessageNow(host, "/reset", {
+      await sendChatMessageNow(host, args ? `/reset ${args}` : "/reset", {
         refreshSessions: true,
         previousDraft: sendOpts?.previousDraft,
         restoreDraft: sendOpts?.restoreDraft,
