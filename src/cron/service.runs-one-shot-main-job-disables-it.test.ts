@@ -449,6 +449,33 @@ describe("CronService", () => {
     await stopCronAndCleanup(cron, store);
   });
 
+  it("wakeMode now keeps one-shot main jobs successful when the immediate heartbeat is disabled", async () => {
+    const runHeartbeatOnce = vi.fn(async () => ({
+      status: "skipped" as const,
+      reason: "disabled",
+    }));
+
+    const { store, cron, enqueueSystemEvent, requestHeartbeat } =
+      await createWakeModeNowMainHarness({
+        runHeartbeatOnce,
+      });
+
+    const job = await addWakeModeNowMainSystemEventJob(cron, {
+      name: "wakeMode now heartbeat disabled",
+    });
+
+    await cron.run(job.id, "force");
+
+    expect(runHeartbeatOnce).toHaveBeenCalledTimes(1);
+    expect(requestHeartbeat).not.toHaveBeenCalled();
+    expectMainSystemEventPosted(enqueueSystemEvent, { text: "hello", jobId: job.id });
+    expect(job.state.lastStatus).toBe("ok");
+    expect(job.state.lastError).toBeUndefined();
+    expect((await cron.list()).some((entry) => entry.id === job.id)).toBe(false);
+
+    await stopCronAndCleanup(cron, store);
+  });
+
   it("runs an isolated job without posting a fallback summary to main", async () => {
     const runIsolatedAgentJob = vi.fn(async () => ({ status: "ok" as const, summary: "done" }));
     const { store, cron, enqueueSystemEvent, requestHeartbeat, events } =
