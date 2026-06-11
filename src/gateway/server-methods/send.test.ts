@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   applyPluginAutoEnable: vi.fn(),
   getRuntimeConfigSnapshot: vi.fn(),
   getRuntimeConfigSourceSnapshot: vi.fn(),
+  normalizeChannelId: vi.fn((value: string) => (value === "webchat" ? null : value)),
 }));
 
 vi.mock("../../config/config.js", async () => {
@@ -49,7 +50,7 @@ vi.mock("../../config/config.js", async () => {
 vi.mock("../../channels/plugins/index.js", () => ({
   getLoadedChannelPlugin: mocks.getChannelPlugin,
   getChannelPlugin: mocks.getChannelPlugin,
-  normalizeChannelId: (value: string) => (value === "webchat" ? null : value),
+  normalizeChannelId: mocks.normalizeChannelId,
 }));
 
 vi.mock("../../channels/plugins/message-action-dispatch.js", () => ({
@@ -316,6 +317,9 @@ describe("gateway send mirroring", () => {
     }));
     mocks.getRuntimeConfigSnapshot.mockReturnValue(null);
     mocks.getRuntimeConfigSourceSnapshot.mockReturnValue(null);
+    mocks.normalizeChannelId.mockImplementation((value: string) =>
+      value === "webchat" ? null : value,
+    );
     mocks.resolveOutboundTarget.mockReturnValue({ ok: true, to: "resolved" });
     mocks.resolveOutboundSessionRoute.mockImplementation(
       async ({ agentId, channel }: { agentId?: string; channel?: string }) => ({
@@ -325,10 +329,13 @@ describe("gateway send mirroring", () => {
             : `agent:${agentId ?? "main"}:${channel ?? "main"}:resolved`,
       }),
     );
-    mocks.resolveMessageChannelSelection.mockResolvedValue({
-      channel: "slack",
-      configured: ["slack"],
-    });
+    mocks.resolveMessageChannelSelection.mockImplementation(
+      async ({ channel }: { channel?: string | null }) => ({
+        channel: channel ?? "slack",
+        configured: channel ? [] : ["slack"],
+        source: channel ? "explicit" : "single-configured",
+      }),
+    );
     mocks.dispatchChannelMessageAction.mockResolvedValue({
       details: { action: "handled" },
     });
@@ -1672,6 +1679,66 @@ describe("gateway send mirroring", () => {
       idempotencyKey: "idem-source-message-action",
       config: {},
     });
+  });
+
+  it("allows configured Telegram message.action sends when explicit channel registry normalization misses", async () => {
+    const telegramPlugin: ChannelPlugin = {
+      id: "telegram",
+      meta: {
+        id: "telegram",
+        label: "Telegram",
+        selectionLabel: "Telegram",
+        docsPath: "/channels/telegram",
+        blurb: "Telegram explicit channel selection regression test plugin.",
+      },
+      capabilities: { chatTypes: ["direct"] },
+      config: {
+        listAccountIds: () => ["default"],
+        resolveAccount: () => ({ enabled: true }),
+        isConfigured: () => true,
+      },
+      actions: {
+        describeMessageTool: () => ({ actions: ["send"] }),
+        supportsAction: ({ action }) => action === "send",
+        handleAction: async () => jsonResult({ ok: true, messageId: "tg-1" }),
+      },
+    };
+    mocks.normalizeChannelId.mockReturnValue(null);
+    mocks.resolveMessageChannelSelection.mockResolvedValueOnce({
+      channel: "telegram",
+      configured: [],
+      source: "explicit",
+    });
+    mocks.getChannelPlugin.mockReturnValue(telegramPlugin);
+    mocks.dispatchChannelMessageAction.mockResolvedValueOnce(
+      jsonResult({ ok: true, messageId: "tg-1" }),
+    );
+
+    const { respond } = await runMessageActionRequest({
+      channel: "telegram",
+      action: "send",
+      params: {
+        to: "248008339",
+        message: "Hello",
+      },
+      idempotencyKey: "idem-explicit-telegram-registry-miss",
+    });
+
+    expect(firstRespondCall(respond)[0]).toBe(true);
+    expect(mocks.resolveMessageChannelSelection).toHaveBeenCalledWith({
+      cfg: {},
+      channel: "telegram",
+    });
+    expect(lastDispatchChannelMessageActionCall()).toEqual(
+      expect.objectContaining({
+        channel: "telegram",
+        action: "send",
+        params: {
+          to: "248008339",
+          message: "Hello",
+        },
+      }),
+    );
   });
 
   it("mirrors accepted source send text aliases", async () => {

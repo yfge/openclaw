@@ -177,8 +177,11 @@ async function resolveRequestedChannel(params: {
     }
 > {
   const channelInput = readStringValue(params.requestChannel);
-  const normalizedChannel = channelInput ? normalizeChannelId(channelInput) : null;
-  if (channelInput && !normalizedChannel) {
+  const sourceCfg = params.context.getRuntimeConfig();
+  const cfg = resolveGatewayPluginConfig({
+    config: sourceCfg,
+  });
+  if (channelInput) {
     const normalizedInput = normalizeOptionalLowercaseString(channelInput) ?? "";
     if (params.rejectWebchatAsInternalOnly && normalizedInput === "webchat") {
       return {
@@ -188,23 +191,25 @@ async function resolveRequestedChannel(params: {
         ),
       };
     }
-    return {
-      error: errorShape(ErrorCodes.INVALID_REQUEST, params.unsupportedMessage(channelInput)),
-    };
-  }
-  const sourceCfg = params.context.getRuntimeConfig();
-  const cfg = resolveGatewayPluginConfig({
-    config: sourceCfg,
-  });
-  let channel = normalizedChannel;
-  if (!channel) {
+    const normalizedChannel = normalizeChannelId(channelInput);
+    if (normalizedChannel) {
+      return { cfg, sourceCfg, channel: normalizedChannel };
+    }
     try {
-      channel = (await resolveMessageChannelSelection({ cfg })).channel;
-    } catch (err) {
-      return { error: errorShape(ErrorCodes.INVALID_REQUEST, String(err)) };
+      const selection = await resolveMessageChannelSelection({ cfg, channel: channelInput });
+      return { cfg, sourceCfg, channel: selection.channel };
+    } catch {
+      return {
+        error: errorShape(ErrorCodes.INVALID_REQUEST, params.unsupportedMessage(channelInput)),
+      };
     }
   }
-  return { cfg, sourceCfg, channel };
+  try {
+    const channel = (await resolveMessageChannelSelection({ cfg })).channel;
+    return { cfg, sourceCfg, channel };
+  } catch (err) {
+    return { error: errorShape(ErrorCodes.INVALID_REQUEST, String(err)) };
+  }
 }
 
 async function resolveInternalDeliveryChannel(
