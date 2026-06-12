@@ -1,5 +1,6 @@
 /** Tests heartbeat prompt, token, task parsing, and due-time helpers. */
 import { describe, expect, it } from "vitest";
+import { resolveHeartbeatReplyPayload } from "./heartbeat-reply-payload.js";
 import {
   DEFAULT_HEARTBEAT_ACK_MAX_CHARS,
   HEARTBEAT_RESPONSE_TOOL_PROMPT,
@@ -163,6 +164,34 @@ describe("stripHeartbeatToken", () => {
       text: "All clear.",
       didStrip: true,
     });
+  });
+});
+
+describe("resolveHeartbeatReplyPayload", () => {
+  it("skips reasoning-only heartbeat payloads", () => {
+    expect(
+      resolveHeartbeatReplyPayload({ text: "Thinking through the heartbeat", isReasoning: true }),
+    ).toBeUndefined();
+  });
+
+  it("uses the latest non-reasoning outbound payload", () => {
+    const visible = { text: "Final alert" };
+    expect(
+      resolveHeartbeatReplyPayload([
+        { text: "Older visible text" },
+        { text: "Reasoning step", isReasoning: true },
+        visible,
+      ]),
+    ).toBe(visible);
+  });
+
+  it("does not deliver reasoning text when it arrives after HEARTBEAT_OK", () => {
+    expect(
+      resolveHeartbeatReplyPayload([
+        { text: HEARTBEAT_TOKEN },
+        { text: "The message is an OpenClaw heartbeat poll.", isReasoning: true },
+      ]),
+    ).toEqual({ text: HEARTBEAT_TOKEN });
   });
 });
 

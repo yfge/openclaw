@@ -10,11 +10,14 @@ export function resolveHeartbeatReplyPayload(
     return undefined;
   }
   if (!Array.isArray(replyResult)) {
-    return replyResult;
+    return replyResult.isReasoning === true ? undefined : replyResult;
   }
   for (let idx = replyResult.length - 1; idx >= 0; idx -= 1) {
     const payload = replyResult[idx];
     if (!payload) {
+      continue;
+    }
+    if (payload.isReasoning === true) {
       continue;
     }
     if (hasOutboundReplyContent(payload)) {
