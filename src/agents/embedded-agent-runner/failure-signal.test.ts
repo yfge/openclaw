@@ -38,6 +38,28 @@ describe("resolveEmbeddedRunFailureSignal", () => {
     ).toBe("INVALID_REQUEST");
   });
 
+  it("classifies exhausted unavailable-tool loops before last tool errors", () => {
+    expect(
+      resolveEmbeddedRunFailureSignal({
+        trigger: "cron",
+        unavailableToolFailure: { toolName: "process", count: 11, threshold: 10 },
+        lastToolError: {
+          toolName: "exec",
+          errorCode: "SYSTEM_RUN_DENIED",
+          error: "SYSTEM_RUN_DENIED: approval required",
+        },
+      }),
+    ).toEqual({
+      kind: "unavailable_tool",
+      source: "tool",
+      toolName: "process",
+      code: "UNAVAILABLE_TOOL_EXHAUSTED",
+      message:
+        'Unavailable tool "process" was requested 11 times and exhausted the cron tool guard.',
+      fatalForCron: true,
+    });
+  });
+
   it("does not mark non-cron runs", () => {
     expect(
       resolveEmbeddedRunFailureSignal({

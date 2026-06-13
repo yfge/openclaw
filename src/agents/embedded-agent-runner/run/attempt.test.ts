@@ -34,6 +34,7 @@ import {
   wrapStreamFnRepairMalformedToolCallArguments,
 } from "./attempt.tool-call-argument-repair.js";
 import {
+  type UnknownToolLoopGuardState,
   wrapStreamFnSanitizeMalformedToolCalls,
   wrapStreamFnTrimToolCallNames,
 } from "./attempt.tool-call-normalization.js";
@@ -846,6 +847,10 @@ describe("wrapStreamFnTrimToolCallNames", () => {
   });
 
   it("rewrites repeated unavailable tool calls into plain assistant text after the threshold", async () => {
+    const unknownToolState: UnknownToolLoopGuardState = {
+      count: 0,
+      countedMessages: new WeakSet<object>(),
+    };
     const baseFn = vi.fn(() =>
       createFakeStream({
         events: [],
@@ -857,6 +862,7 @@ describe("wrapStreamFnTrimToolCallNames", () => {
     );
     const wrappedFn = wrapStreamFnTrimToolCallNames(baseFn as never, new Set(["read"]), {
       unknownToolThreshold: 10,
+      state: unknownToolState,
     });
 
     for (let i = 0; i < 10; i += 1) {
@@ -875,6 +881,11 @@ describe("wrapStreamFnTrimToolCallNames", () => {
 
     expect(blockedResult.role).toBe("assistant");
     expectSingleTextContent(blockedResult.content, '"exec"');
+    expect(unknownToolState.terminalFailure).toEqual({
+      toolName: "exec",
+      count: 11,
+      threshold: 10,
+    });
   });
 
   it("leaves repeated unavailable tool calls alone when the unknown-tool guard is disabled", async () => {

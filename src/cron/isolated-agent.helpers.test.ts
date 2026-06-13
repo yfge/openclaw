@@ -409,6 +409,42 @@ describe("resolveCronPayloadOutcome", () => {
     expect(result.deliveryPayloadHasStructuredContent).toBe(false);
   });
 
+  it("treats unavailable-tool failure signals as fatal cron errors", () => {
+    const result = resolveCronPayloadOutcome({
+      payloads: [
+        {
+          text: "I can't use the tool \"process\" here because it isn't available.",
+        },
+      ],
+      finalAssistantVisibleText:
+        "I can't use the tool \"process\" here because it isn't available.",
+      preferFinalAssistantVisibleText: true,
+      failureSignal: {
+        kind: "unavailable_tool",
+        source: "tool",
+        toolName: "process",
+        code: "UNAVAILABLE_TOOL_EXHAUSTED",
+        message:
+          'Unavailable tool "process" was requested 11 times and exhausted the cron tool guard.',
+        fatalForCron: true,
+      },
+    });
+
+    expect(result.hasFatalErrorPayload).toBe(true);
+    expect(result.embeddedRunError).toBe(
+      'cron classifier: unavailable_tool failure from process (UNAVAILABLE_TOOL_EXHAUSTED): Unavailable tool "process" was requested 11 times and exhausted the cron tool guard.',
+    );
+    expect(result.outputText).toBe(
+      'Unavailable tool "process" was requested 11 times and exhausted the cron tool guard.',
+    );
+    expect(result.deliveryPayloads).toEqual([
+      {
+        text: 'Unavailable tool "process" was requested 11 times and exhausted the cron tool guard.',
+        isError: true,
+      },
+    ]);
+  });
+
   it("ignores non-fatal failure signal metadata", () => {
     const result = resolveCronPayloadOutcome({
       payloads: [{ text: "ordinary success" }],

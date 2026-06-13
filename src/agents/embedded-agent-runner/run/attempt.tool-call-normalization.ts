@@ -35,10 +35,17 @@ import { wrapStreamObjectEvents } from "./stream-wrapper.js";
 
 const BLANK_TOOL_CALL_NAME_DESCRIPTION = "blank tool name";
 
-type UnknownToolLoopGuardState = {
+export type UnknownToolLoopFailure = {
+  toolName: string;
+  count: number;
+  threshold: number;
+};
+
+export type UnknownToolLoopGuardState = {
   lastUnknownToolName?: string;
   count: number;
   countedMessages: WeakSet<object>;
+  terminalFailure?: UnknownToolLoopFailure;
 };
 type AssistantStream = Awaited<ReturnType<StreamFn>>;
 
@@ -785,6 +792,13 @@ function rewriteUnknownToolLoopMessage(message: unknown, toolName: string): void
   ];
 }
 
+function recordUnknownToolLoopFailure(
+  state: UnknownToolLoopGuardState,
+  params: { toolName: string; count: number; threshold: number },
+): void {
+  state.terminalFailure = params;
+}
+
 function guardUnknownToolLoopInMessage(
   message: unknown,
   state: UnknownToolLoopGuardState,
@@ -834,6 +848,11 @@ function guardUnknownToolLoopInMessage(
     // messages advance the loop counter.
     if (state.lastUnknownToolName === unknownToolName && state.count > threshold) {
       rewriteUnknownToolLoopMessage(message, unknownToolName);
+      recordUnknownToolLoopFailure(state, {
+        toolName: unknownToolName,
+        count: state.count,
+        threshold,
+      });
     }
     return false;
   }
@@ -842,6 +861,11 @@ function guardUnknownToolLoopInMessage(
     if (state.countedMessages.has(message)) {
       if (state.lastUnknownToolName === unknownToolName && state.count > threshold) {
         rewriteUnknownToolLoopMessage(message, unknownToolName);
+        recordUnknownToolLoopFailure(state, {
+          toolName: unknownToolName,
+          count: state.count,
+          threshold,
+        });
       }
       return true;
     }
@@ -857,6 +881,11 @@ function guardUnknownToolLoopInMessage(
 
   if (state.count > threshold) {
     rewriteUnknownToolLoopMessage(message, unknownToolName);
+    recordUnknownToolLoopFailure(state, {
+      toolName: unknownToolName,
+      count: state.count,
+      threshold,
+    });
   }
   return true;
 }
@@ -1115,9 +1144,9 @@ function wrapStreamTrimToolCallNames(
 export function wrapStreamFnTrimToolCallNames(
   baseFn: StreamFn,
   allowedToolNames?: Set<string>,
-  guardOptions?: { unknownToolThreshold?: number },
+  guardOptions?: { unknownToolThreshold?: number; state?: UnknownToolLoopGuardState },
 ): StreamFn {
-  const unknownToolGuardState: UnknownToolLoopGuardState = {
+  const unknownToolGuardState: UnknownToolLoopGuardState = guardOptions?.state ?? {
     count: 0,
     countedMessages: new WeakSet<object>(),
   };

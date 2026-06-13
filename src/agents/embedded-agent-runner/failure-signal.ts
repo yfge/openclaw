@@ -12,10 +12,11 @@ import type { EmbeddedRunFailureSignal } from "./types.js";
  * a normal silent completion.
  */
 const FAILURE_SIGNAL_CODES = ["SYSTEM_RUN_DENIED", "INVALID_REQUEST"] as const;
+type ExecutionDeniedFailureSignalCode = (typeof FAILURE_SIGNAL_CODES)[number];
 
 function resolveFailureSignalCode(
   value: string | undefined,
-): EmbeddedRunFailureSignal["code"] | undefined {
+): ExecutionDeniedFailureSignalCode | undefined {
   for (const code of FAILURE_SIGNAL_CODES) {
     if (value === code) {
       return code;
@@ -28,9 +29,23 @@ function resolveFailureSignalCode(
 export function resolveEmbeddedRunFailureSignal(params: {
   trigger?: string | undefined;
   lastToolError?: ToolErrorSummary | undefined;
+  unavailableToolFailure?: { toolName: string; count: number; threshold: number } | undefined;
 }): EmbeddedRunFailureSignal | undefined {
   if (params.trigger !== "cron") {
     return undefined;
+  }
+  const unavailableToolFailure = params.unavailableToolFailure;
+  if (unavailableToolFailure) {
+    return {
+      kind: "unavailable_tool",
+      source: "tool",
+      toolName: unavailableToolFailure.toolName,
+      code: "UNAVAILABLE_TOOL_EXHAUSTED",
+      message:
+        `Unavailable tool "${unavailableToolFailure.toolName}" was requested ` +
+        `${unavailableToolFailure.count} times and exhausted the cron tool guard.`,
+      fatalForCron: true,
+    };
   }
   const lastToolError = params.lastToolError;
   if (!lastToolError || !isExecLikeToolName(lastToolError.toolName)) {

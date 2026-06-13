@@ -176,6 +176,11 @@ export type EmbeddedRunAttemptResult = {
   lastAssistant: AssistantMessage | undefined;
   currentAttemptAssistant?: AssistantMessage | undefined;
   lastToolError?: ToolErrorSummary;
+  unavailableToolFailure?: {
+    toolName: string;
+    count: number;
+    threshold: number;
+  };
   didSendViaMessagingTool: boolean;
   didDeliverSourceReplyViaMessageTool?: boolean;
   didSendDeterministicApprovalPrompt?: boolean;

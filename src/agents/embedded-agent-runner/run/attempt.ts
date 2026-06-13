@@ -415,6 +415,7 @@ import {
   sanitizeOpenAIResponsesReplayForStream,
   sanitizeReplayToolCallIdsForStream,
   shouldApplyReplayToolCallIdSanitizer,
+  type UnknownToolLoopGuardState,
   wrapStreamFnPromoteStandaloneTextToolCalls,
   wrapStreamFnSanitizeMalformedToolCalls,
   wrapStreamFnTrimToolCallNames,
@@ -2836,11 +2837,16 @@ export async function runEmbeddedAttempt(
         activeSession.agent.streamFn,
         allowedToolNames,
       );
+      const unknownToolGuardState: UnknownToolLoopGuardState = {
+        count: 0,
+        countedMessages: new WeakSet<object>(),
+      };
       activeSession.agent.streamFn = wrapStreamFnTrimToolCallNames(
         activeSession.agent.streamFn,
         allowedToolNames,
         {
           unknownToolThreshold: resolveUnknownToolGuardThreshold(clientToolLoopDetection),
+          state: unknownToolGuardState,
         },
       );
 
@@ -5285,6 +5291,7 @@ export async function runEmbeddedAttempt(
         lastAssistant,
         currentAttemptAssistant,
         lastToolError,
+        unavailableToolFailure: unknownToolGuardState.terminalFailure,
         didSendViaMessagingTool: didSendViaMessagingTool(),
         didDeliverSourceReplyViaMessageTool,
         didSendDeterministicApprovalPrompt: didSendDeterministicApprovalPromptNow,
