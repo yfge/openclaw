@@ -1891,23 +1891,13 @@ async function deliverOutboundPayloadsCore(
               unit.overrides,
             )
           : await deliveryHandler.sendMedia(unit.caption ?? "", unit.mediaUrl, unit.overrides);
+        if (!hasDeliveryResultIdentity(delivery)) {
+          continue;
+        }
         results.push(delivery);
         firstMessageId ??= delivery.messageId;
         lastMessageId = delivery.messageId;
       }
-      await maybePinDeliveredMessage({
-        handler: deliveryHandler,
-        payload: effectivePayload,
-        target: deliveryTarget,
-        messageId: firstMessageId,
-        gatewayClientScopes: params.gatewayClientScopes,
-      });
-      await maybeNotifyAfterDeliveredPayload({
-        handler: deliveryHandler,
-        payload: effectivePayload,
-        target: deliveryTarget,
-        results: results.slice(beforeCount),
-      });
       const deliveredResults = results.slice(beforeCount);
       if (deliveredResults.length > 0) {
         recordPayloadOutcome({
@@ -1916,6 +1906,24 @@ async function deliverOutboundPayloadsCore(
           results: deliveredResults,
         });
         recordDeliveredMirrorPayload(payloadSummary, deliveredResults);
+        await maybePinDeliveredMessage({
+          handler: deliveryHandler,
+          payload: effectivePayload,
+          target: deliveryTarget,
+          messageId: firstMessageId,
+          gatewayClientScopes: params.gatewayClientScopes,
+        });
+        await maybeNotifyAfterDeliveredPayload({
+          handler: deliveryHandler,
+          payload: effectivePayload,
+          target: deliveryTarget,
+          results: deliveredResults,
+        });
+        emitMessageSent({
+          success: true,
+          content: payloadSummary.hookContent ?? payloadSummary.text,
+          messageId: lastMessageId,
+        });
       } else {
         recordPayloadOutcome(
           suppressedPayloadOutcome({
@@ -1925,11 +1933,6 @@ async function deliverOutboundPayloadsCore(
         );
       }
       completeDeliveryDiagnostics(results.length - beforeCount);
-      emitMessageSent({
-        success: true,
-        content: payloadSummary.hookContent ?? payloadSummary.text,
-        messageId: lastMessageId,
-      });
     } catch (err) {
       recordPayloadOutcome({
         index: payloadIndex,
