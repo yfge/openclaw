@@ -121,6 +121,7 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
   type TypingDispatcherOptions = {
     onReplyStart?: () => Promise<void> | void;
     onIdle?: () => Promise<void> | void;
+    onAssistantMessageStart?: () => Promise<void> | void;
     deliver: (
       payload: { text?: string; mediaUrl?: string; mediaUrls?: string[]; audioAsVoice?: boolean },
       meta: { kind: string },
@@ -1010,6 +1011,43 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
         note: "Agent: agent",
       },
     );
+  });
+
+  it("preserves pre-tool partial text when a later final payload closes the stream", async () => {
+    resolveFeishuAccountMock.mockReturnValue({
+      accountId: "main",
+      appId: "app_id",
+      appSecret: "app_secret",
+      domain: "feishu",
+      config: {
+        renderMode: "card",
+        streaming: true,
+      },
+    });
+
+    const { result, options } = createDispatcherHarness({
+      runtime: createRuntimeLogger(),
+    });
+    await options.onReplyStart?.();
+    result.replyOptions.onPartialReply?.({
+      text: "Step 1: identify the requested lookup.\nStep 2: choose the weather tool.\n",
+    });
+    result.replyOptions.onAssistantMessageStart?.();
+    await options.deliver(
+      { text: "Step 3: read the tool result.\nStep 4: summarize the forecast." },
+      { kind: "final" },
+    );
+    await options.onIdle?.();
+
+    expect(streamingInstances).toHaveLength(1);
+    expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
+    expect(streamingInstances[0].close).toHaveBeenCalledWith(
+      "Step 1: identify the requested lookup.\nStep 2: choose the weather tool.\nStep 3: read the tool result.\nStep 4: summarize the forecast.",
+      {
+        note: "Agent: agent",
+      },
+    );
+    expect(sendMessageFeishuMock).not.toHaveBeenCalled();
   });
 
   it("strips reasoning tags from streamed partial snapshots", async () => {

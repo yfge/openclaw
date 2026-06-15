@@ -66,6 +66,25 @@ function formatMediaFallbackText(text: string | undefined, mediaUrl: string): st
   return trimmedText ? `${trimmedText}\n\n${attachmentText}` : attachmentText;
 }
 
+function extractSingleFencedBlockBody(text: string): string | null {
+  const match = /^```[^\n]*\n([\s\S]*?)\n```$/u.exec(text.trim());
+  return match?.[1] ?? null;
+}
+
+function mergeFinalStreamingText(previousText: string, finalText: string): string {
+  const previousFenceBody = extractSingleFencedBlockBody(previousText);
+  const finalFenceBody = extractSingleFencedBlockBody(finalText);
+  if (previousFenceBody !== null && finalFenceBody !== null) {
+    if (finalFenceBody.includes(previousFenceBody)) {
+      return finalText;
+    }
+    if (previousFenceBody.includes(finalFenceBody)) {
+      return previousText;
+    }
+  }
+  return mergeStreamingText(previousText, finalText);
+}
+
 export function clearFeishuStreamingStartBackoffForTests() {
   streamingStartBackoffUntilByAccount.clear();
 }
@@ -705,9 +724,9 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
               queueStreamingUpdate(text, { mode: "delta", dedupeWithLastPartial: true });
             }
             if (info?.kind === "final") {
-              streamText = text;
+              streamText = mergeFinalStreamingText(streamText, text);
               snapshotBaseText = "";
-              lastSnapshotTextLength = text.length;
+              lastSnapshotTextLength = streamText.length;
               flushStreamingCardUpdate(buildCombinedStreamText(reasoningText, streamText));
             }
             // Send media even when streaming handled the text
