@@ -851,6 +851,23 @@ function hasDeliveryResultIdentity(result: OutboundDeliveryResult): boolean {
   );
 }
 
+function describeMissingDeliveryIdentity(result: unknown): string {
+  if (result && typeof result === "object") {
+    const error = (result as { error?: unknown }).error;
+    if (typeof error === "string" && error.trim()) {
+      return error.trim();
+    }
+  }
+  return "channel adapter returned no delivered message id";
+}
+
+function assertDeliveryResultIdentity(result: OutboundDeliveryResult, context: string): void {
+  if (hasDeliveryResultIdentity(result)) {
+    return;
+  }
+  throw new Error(`${context}: ${describeMissingDeliveryIdentity(result)}`);
+}
+
 function normalizeDeliveryPin(payload: ReplyPayload): ReplyPayloadDeliveryPin | undefined {
   const pin = payload.delivery?.pin;
   if (pin === true) {
@@ -1422,7 +1439,12 @@ async function deliverOutboundPayloadsCore(
         continue;
       }
       throwIfAborted(abortSignal);
-      results.push(await handler.sendText(unit.text, unit.overrides));
+      const delivery = await handler.sendText(unit.text, unit.overrides);
+      assertDeliveryResultIdentity(
+        delivery,
+        `Outbound text delivery failed for channel ${channel}`,
+      );
+      results.push(delivery);
     }
   };
   const normalizedPayloads = normalizePayloadsForChannelDelivery(outboundPayloadPlan, handler);
@@ -1591,16 +1613,10 @@ async function deliverOutboundPayloadsCore(
           effectivePayload,
           applySendReplyToConsumption(sendOverrides),
         );
-        if (!hasDeliveryResultIdentity(delivery)) {
-          completeDeliveryDiagnostics(0);
-          recordPayloadOutcome(
-            suppressedPayloadOutcome({
-              index: payloadIndex,
-              reason: "adapter_returned_no_identity",
-            }),
-          );
-          continue;
-        }
+        assertDeliveryResultIdentity(
+          delivery,
+          `Outbound structured delivery failed for channel ${channel}`,
+        );
         results.push(delivery);
         recordPayloadOutcome({ index: payloadIndex, status: "sent", results: [delivery] });
         await maybePinDeliveredMessage({
@@ -1626,12 +1642,17 @@ async function deliverOutboundPayloadsCore(
       if (payloadSummary.mediaUrls.length === 0) {
         const beforeCount = results.length;
         if (handler.sendFormattedText) {
-          results.push(
-            ...(await handler.sendFormattedText(
-              payloadSummary.text,
-              applySendReplyToConsumption(sendOverrides),
-            )),
+          const formattedResults = await handler.sendFormattedText(
+            payloadSummary.text,
+            applySendReplyToConsumption(sendOverrides),
           );
+          for (const delivery of formattedResults) {
+            assertDeliveryResultIdentity(
+              delivery,
+              `Outbound text delivery failed for channel ${channel}`,
+            );
+          }
+          results.push(...formattedResults);
         } else {
           await sendTextChunks(payloadSummary.text, sendOverrides);
         }
@@ -1745,6 +1766,10 @@ async function deliverOutboundPayloadsCore(
         const delivery = handler.sendFormattedMedia
           ? await handler.sendFormattedMedia(unit.caption ?? "", unit.mediaUrl, unit.overrides)
           : await handler.sendMedia(unit.caption ?? "", unit.mediaUrl, unit.overrides);
+        assertDeliveryResultIdentity(
+          delivery,
+          `Outbound media delivery failed for channel ${channel}`,
+        );
         results.push(delivery);
         firstMessageId ??= delivery.messageId;
         lastMessageId = delivery.messageId;

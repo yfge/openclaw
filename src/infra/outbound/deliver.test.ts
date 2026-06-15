@@ -2973,7 +2973,7 @@ describe("deliverOutboundPayloads", () => {
     expect(sendText).not.toHaveBeenCalled();
   });
 
-  it("does not count no-op sendPayload results as delivered", async () => {
+  it("fails sendPayload deliveries that return no delivery identity", async () => {
     hookMocks.runner.hasHooks.mockReturnValue(true);
     const sendPayload = vi.fn().mockResolvedValue({ channel: "matrix", messageId: "" });
     const sendText = vi.fn();
@@ -2995,22 +2995,34 @@ describe("deliverOutboundPayloads", () => {
       ]),
     );
 
-    const results = await deliverOutboundPayloads({
-      cfg: {},
-      channel: "matrix",
-      to: "!room:1",
-      payloads: [{ text: "provider exploded", isError: true }],
-      mirror: {
-        sessionKey: "agent:main:main",
-        agentId: "main",
-        text: "provider exploded",
-      },
-    });
+    await expect(
+      deliverOutboundPayloads({
+        cfg: {},
+        channel: "matrix",
+        to: "!room:1",
+        payloads: [{ text: "provider exploded", isError: true }],
+        mirror: {
+          sessionKey: "agent:main:main",
+          agentId: "main",
+          text: "provider exploded",
+        },
+      }),
+    ).rejects.toThrow(
+      "Outbound structured delivery failed for channel matrix: channel adapter returned no delivered message id",
+    );
 
-    expect(results).toStrictEqual([]);
     expect(sendPayload).toHaveBeenCalledTimes(1);
     expect(sendText).not.toHaveBeenCalled();
-    expect(hookMocks.runner.runMessageSent).not.toHaveBeenCalled();
+    expect(hookMocks.runner.runMessageSent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "!room:1",
+        content: "provider exploded",
+        success: false,
+        error:
+          "Outbound structured delivery failed for channel matrix: channel adapter returned no delivered message id",
+      }),
+      expect.objectContaining({ channelId: "matrix" }),
+    );
     expect(mocks.appendAssistantMessageToSessionTranscript).not.toHaveBeenCalled();
   });
 
@@ -3345,6 +3357,55 @@ describe("deliverOutboundPayloads", () => {
       "Plugin outbound adapter does not implement sendMedia and no text fallback is available for media payload",
     );
     expect(sentCall?.[1]?.channelId).toBe("matrix");
+  });
+
+  it("treats media adapter error objects without delivery identity as failures", async () => {
+    hookMocks.runner.hasHooks.mockReturnValue(true);
+    const sendMedia = vi.fn().mockResolvedValue({
+      channel: "qqbot",
+      error: "Voice not supported in channel",
+    });
+    setActivePluginRegistry(
+      createTestRegistry([
+        {
+          pluginId: "qqbot",
+          source: "test",
+          plugin: createOutboundTestPlugin({
+            id: "qqbot",
+            outbound: {
+              deliveryMode: "direct",
+              sendText: vi.fn(),
+              sendMedia,
+            },
+          }),
+        },
+      ]),
+    );
+
+    await expect(
+      deliverOutboundPayloads({
+        cfg: {},
+        channel: "qqbot",
+        to: "qqbot:group:123",
+        payloads: [{ text: "cron audio", mediaUrl: "file:///tmp/cron.wav" }],
+      }),
+    ).rejects.toThrow(
+      "Outbound media delivery failed for channel qqbot: Voice not supported in channel",
+    );
+
+    const sentCall = requireMockCall(hookMocks.runner.runMessageSent, "message_sent hook") as
+      | [
+          { content?: unknown; error?: unknown; success?: unknown; to?: unknown },
+          { channelId?: unknown },
+        ]
+      | undefined;
+    expect(sentCall?.[0]?.to).toBe("qqbot:group:123");
+    expect(sentCall?.[0]?.content).toBe("cron audio");
+    expect(sentCall?.[0]?.success).toBe(false);
+    expect(sentCall?.[0]?.error).toBe(
+      "Outbound media delivery failed for channel qqbot: Voice not supported in channel",
+    );
+    expect(sentCall?.[1]?.channelId).toBe("qqbot");
   });
 
   it("emits message_sent failure when delivery errors", async () => {
