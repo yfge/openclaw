@@ -673,23 +673,29 @@ export function recomputeNextRunsForMaintenance(
     recomputeExpired?: boolean;
     nowMs?: number;
     repairFutureCronNextRunAtMs?: boolean;
-    skipFutureRepairJobIds?: ReadonlySet<string>;
   },
 ): boolean {
   const recomputeExpired = opts?.recomputeExpired ?? false;
   const repairFutureCronNextRunAtMs = opts?.repairFutureCronNextRunAtMs ?? true;
-  const skipFutureRepairJobIds = opts?.skipFutureRepairJobIds;
   return walkSchedulableJobs(
     state,
     ({ job, nowMs: now }) => {
       let changed = false;
+      const pendingDeferralJobIds = (state.pendingCatchupDeferralJobIds ??= new Set<string>());
+      const pendingCatchupDeferral =
+        hasScheduledNextRunAtMs(job.state.nextRunAtMs) &&
+        pendingDeferralJobIds.has(job.id) &&
+        now < job.state.nextRunAtMs;
+      if (pendingDeferralJobIds.has(job.id) && !pendingCatchupDeferral) {
+        pendingDeferralJobIds.delete(job.id);
+      }
       if (!hasScheduledNextRunAtMs(job.state.nextRunAtMs)) {
         if (recomputeJobNextRunAtMs({ state, job, nowMs: now })) {
           changed = true;
         }
       } else if (
         repairFutureCronNextRunAtMs &&
-        !skipFutureRepairJobIds?.has(job.id) &&
+        !pendingCatchupDeferral &&
         shouldRepairFutureCronNextRunAtMs({ state, job, nowMs: now })
       ) {
         if (recomputeJobNextRunAtMs({ state, job, nowMs: now })) {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { setupCronServiceSuite } from "./service.test-harness.js";
-import { start } from "./service/ops.js";
+import { list, start, status } from "./service/ops.js";
 import { createCronServiceState } from "./service/state.js";
 import { saveCronStore } from "./store.js";
 import type { CronJob } from "./types.js";
@@ -41,7 +41,7 @@ describe("CronService startup catch-up repair scoping", () => {
     };
   }
 
-  it("keeps the overflow daily-cron catch-up deferral after start()'s maintenance pass", async () => {
+  it("keeps the overflow daily-cron catch-up deferral through read maintenance", async () => {
     const store = await makeStorePath();
     const startNow = Date.parse("2025-12-13T17:00:00.000Z");
     const tomorrowNaturalSlot = Date.parse("2025-12-14T09:00:00.000Z");
@@ -74,6 +74,13 @@ describe("CronService startup catch-up repair scoping", () => {
 
     expect(deferred?.state.nextRunAtMs).toBe(startNow + 5_000);
     expect(deferred?.state.nextRunAtMs).not.toBe(tomorrowNaturalSlot);
+
+    await list(state);
+    await status(state);
+
+    const afterRead = state.store?.jobs.find((job) => job.id === "daily-overflow");
+    expect(afterRead?.state.nextRunAtMs).toBe(startNow + 5_000);
+    expect(afterRead?.state.nextRunAtMs).not.toBe(tomorrowNaturalSlot);
 
     state.stopped = true;
     await store.cleanup();

@@ -253,7 +253,7 @@ export async function start(state: CronServiceState) {
   if (state.stopped) {
     return;
   }
-  const deferredCatchupJobIds = await runMissedJobs(state, {
+  await runMissedJobs(state, {
     skipJobIds: interruptedJobIds.size > 0 ? interruptedJobIds : undefined,
     deferAgentTurnJobs: true,
   });
@@ -268,7 +268,6 @@ export async function start(state: CronServiceState) {
     }
     const changed = recomputeNextRunsForMaintenance(state, {
       recomputeExpired: true,
-      skipFutureRepairJobIds: deferredCatchupJobIds,
     });
     if (changed) {
       await persist(state);
@@ -548,6 +547,7 @@ export async function update(state: CronServiceState, id: string, patch: CronJob
 
     nextJob.updatedAtMs = now;
     if (scheduleChanged || enabledChanged) {
+      state.pendingCatchupDeferralJobIds.delete(id);
       if (isJobEnabled(nextJob)) {
         nextJob.state.nextRunAtMs = computeJobNextRunAtMs(nextJob, now);
       } else {
@@ -589,6 +589,9 @@ export async function remove(state: CronServiceState, id: string) {
     const removedJob = state.store.jobs.find((j) => j.id === id);
     state.store.jobs = state.store.jobs.filter((j) => j.id !== id);
     const removed = (state.store.jobs.length ?? 0) !== before;
+    if (removed) {
+      state.pendingCatchupDeferralJobIds.delete(id);
+    }
     await persist(state);
     armTimer(state);
     if (removed) {
