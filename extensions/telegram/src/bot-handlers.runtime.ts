@@ -1111,13 +1111,19 @@ export const registerTelegramHandlers = ({
       msg,
     });
 
+  const toPromptMediaRef = (mediaRef: string | undefined): string | undefined =>
+    mediaRef && !/^telegram:file\//i.test(mediaRef) ? mediaRef : undefined;
+
   const toReplyChainEntry = (
     node: TelegramCachedMessageNode,
     media?: TelegramMediaRef,
   ): TelegramReplyChainEntry => {
     const { sourceMessage: _sourceMessage, ...entry } = node;
     if (!media?.path) {
-      return entry;
+      return {
+        ...entry,
+        mediaRef: toPromptMediaRef(entry.mediaRef),
+      };
     }
     const { mediaRef: _mediaRef, ...entryWithoutProviderMediaRef } = entry;
     return {
@@ -1141,7 +1147,7 @@ export const registerTelegramHandlers = ({
     body: node.body,
     media_type: media?.contentType ?? node.mediaType,
     media_path: media?.path,
-    media_ref: media?.path ? undefined : node.mediaRef,
+    media_ref: media?.path ? undefined : toPromptMediaRef(node.mediaRef),
     reply_to_id: node.replyToId,
     is_reply_target: flags?.replyTarget === true ? true : undefined,
   });

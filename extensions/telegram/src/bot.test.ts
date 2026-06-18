@@ -2410,7 +2410,7 @@ describe("createTelegramBot", () => {
       expect(payload.ReplyChain?.[1]?.mediaRef).toBeUndefined();
     } else {
       expect(payload.ReplyChain?.[1]?.mediaPath).toBeUndefined();
-      expect(payload.ReplyChain?.[1]?.mediaRef).toBe("telegram:file/generated-photo-1");
+      expect(payload.ReplyChain?.[1]?.mediaRef).toBeUndefined();
     }
     const [conversationContext] = requireArray(
       payload.UntrustedStructuredContext,
@@ -2432,7 +2432,7 @@ describe("createTelegramBot", () => {
       expect(messagesById.get("101")?.media_ref).toBeUndefined();
     } else {
       expect(messagesById.get("101")?.media_path).toBeUndefined();
-      expect(messagesById.get("101")?.media_ref).toBe("telegram:file/generated-photo-1");
+      expect(messagesById.get("101")?.media_ref).toBeUndefined();
     }
     expect(messagesById.get("102")).toMatchObject({
       sender: "UserB",
@@ -2556,7 +2556,7 @@ describe("createTelegramBot", () => {
       (message, index) => requireRecord(message, `conversation context message ${index + 1}`),
     );
     const hiddenMessage = messages.find((message) => message.message_id === "102");
-    expect(hiddenMessage?.media_ref).toBe("telegram:file/hidden-photo-1");
+    expect(hiddenMessage?.media_ref).toBeUndefined();
     expect(hiddenMessage?.media_path).toBeUndefined();
     expect(getFileSpy).not.toHaveBeenCalled();
     expect(mediaFetch).not.toHaveBeenCalled();
@@ -2708,7 +2708,7 @@ describe("createTelegramBot", () => {
         expect(mediaFetch).toHaveBeenCalledTimes(1);
       } else {
         expect(replyMessage?.media_path).toBeUndefined();
-        expect(replyMessage?.media_ref).toBe("telegram:file/allowed-photo-1");
+        expect(replyMessage?.media_ref).toBeUndefined();
         expect(getFileSpy).not.toHaveBeenCalled();
         expect(mediaFetch).not.toHaveBeenCalled();
       }
