@@ -635,7 +635,8 @@ export function createSessionsSendTool(opts?: {
           requesterSessionKey: effectiveRequesterKey,
           targetSessionKey: resolvedKey,
         });
-      const skipA2AFlow = skipAcpA2AFlow || skipNativeParentA2AFlow;
+      const skipFireAndForgetA2AFlow = timeoutSeconds === 0 && !sameSessionA2A;
+      const skipA2AFlow = skipAcpA2AFlow || skipNativeParentA2AFlow || skipFireAndForgetA2AFlow;
       // When the A2A flow is skipped, no follow-up announcement will fire and
       // the reply (when present) is returned inline via the `reply` field.
       // Reflect that in the metadata so the parent LLM does not wait for a

@@ -1110,11 +1110,14 @@ describe("sessions tools", () => {
     const fireDetails = sessionsSendDetails(fire.details);
     expect(fireDetails.status).toBe("accepted");
     expect(fireDetails.runId).toBe("run-1");
-    expect(fireDetails.delivery?.status).toBe("pending");
+    expect(fireDetails.delivery?.status).toBe("skipped");
     expect(fireDetails.delivery?.mode).toBe("announce");
-    await waitForCalls(() => agentCallCount, 3);
-    await waitForCalls(() => waitCallCount, 3);
-    await waitForCalls(() => historyCallCount, 3);
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+    expect(agentCallCount).toBe(1);
+    expect(waitCallCount).toBe(0);
+    expect(historyCallCount).toBe(0);
 
     const waitPromise = tool.execute("call6", {
       sessionKey: "main",
@@ -1128,14 +1131,14 @@ describe("sessions tools", () => {
     expect(waitedDetails.delivery?.status).toBe("pending");
     expect(waitedDetails.delivery?.mode).toBe("announce");
     expect(typeof (waited.details as { runId?: string }).runId).toBe("string");
-    await waitForCalls(() => agentCallCount, 6);
-    await waitForCalls(() => waitCallCount, 6);
-    await waitForCalls(() => historyCallCount, 7);
+    await waitForCalls(() => agentCallCount, 4);
+    await waitForCalls(() => waitCallCount, 3);
+    await waitForCalls(() => historyCallCount, 4);
 
     const agentCalls = calls.filter((call) => call.method === "agent");
     const waitCalls = calls.filter((call) => call.method === "agent.wait");
     const historyOnlyCalls = calls.filter((call) => call.method === "chat.history");
-    expect(agentCalls).toHaveLength(6);
+    expect(agentCalls).toHaveLength(4);
     for (const call of agentCalls) {
       expectInterSessionAgentCall(call);
     }
@@ -1175,8 +1178,8 @@ describe("sessions tools", () => {
           ),
       ),
     ).toBe(true);
-    expect(waitCalls).toHaveLength(6);
-    expect(historyOnlyCalls).toHaveLength(7);
+    expect(waitCalls).toHaveLength(3);
+    expect(historyOnlyCalls).toHaveLength(4);
     expect(sendCallCount).toBe(0);
   });
 

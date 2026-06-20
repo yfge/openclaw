@@ -1109,6 +1109,59 @@ describe("sessions_send gating", () => {
     expect(flowParams?.baseline).toBeUndefined();
   });
 
+  it("does not start A2A follow-up for cross-session fire-and-forget sends", async () => {
+    const { runSessionsSendA2AFlow } = await import("./sessions-send-tool.a2a.js");
+    vi.mocked(runSessionsSendA2AFlow).mockClear();
+    const targetKey = "agent:main:discord:channel:target";
+    const tool = createSessionsSendTool({
+      agentSessionKey: MAIN_AGENT_SESSION_KEY,
+      agentChannel: MAIN_AGENT_CHANNEL,
+      callGateway: callGatewayMock,
+      config: {
+        session: { scope: "per-sender", mainKey: "main" },
+        tools: {
+          agentToAgent: { enabled: true },
+          sessions: { visibility: "all" },
+        },
+      } as never,
+    });
+
+    callGatewayMock.mockImplementation(async (opts: unknown) => {
+      const request = opts as { method?: string };
+      if (request.method === "sessions.list") {
+        return {
+          path: "/tmp/sessions.json",
+          sessions: [{ key: targetKey, kind: "direct" }],
+        };
+      }
+      if (request.method === "agent") {
+        return { runId: "run-fire-and-forget", acceptedAt: 123 };
+      }
+      throw new Error(`unexpected gateway call: ${request.method ?? "unknown"}`);
+    });
+
+    const result = await tool.execute("call-fire-and-forget-cross-session", {
+      sessionKey: targetKey,
+      message: "ping",
+      timeoutSeconds: 0,
+    });
+
+    const details = requireDetails(result);
+    expect(details).toMatchObject({
+      status: "accepted",
+      runId: "run-fire-and-forget",
+      sessionKey: targetKey,
+      delivery: { status: "skipped", mode: "announce" },
+    });
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+    expect(vi.mocked(runSessionsSendA2AFlow)).not.toHaveBeenCalled();
+    expect(callGatewayMock.mock.calls.map((call) => requireRecord(call[0], "call").method)).toEqual(
+      ["sessions.list", "agent"],
+    );
+  });
+
   it("caps oversized timeoutSeconds before waiting for the target run", async () => {
     const tool = createMainSessionsSendTool();
     const waitTimeouts: unknown[] = [];
