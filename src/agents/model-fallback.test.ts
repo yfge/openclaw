@@ -1271,6 +1271,38 @@ describe("runWithModelFallback", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
+  it("aborts the fallback chain on synthesized Codex missing tool results (#95474)", async () => {
+    const cfg = makeCfg({
+      agents: {
+        defaults: {
+          model: {
+            primary: "codex/gpt-5.4",
+            fallbacks: ["anthropic/claude-sonnet-4-6", "openai/gpt-4.1-mini"],
+          },
+        },
+      },
+    });
+    const missingToolResult = new FailoverError(
+      "OpenClaw recorded a native Codex tool.call without a matching tool.result before the turn completed. toolCallId=cmd-1; toolName=bash",
+      {
+        reason: "unknown",
+        provider: "codex",
+        model: "gpt-5.4",
+      },
+    );
+    const run = vi.fn().mockRejectedValue(missingToolResult);
+
+    await expect(
+      runWithModelFallback({
+        cfg,
+        provider: "codex",
+        model: "gpt-5.4",
+        run,
+      }),
+    ).rejects.toBe(missingToolResult);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps provider failover metadata authoritative over nested session locks", async () => {
     const cfg = makeCfg({
       agents: {

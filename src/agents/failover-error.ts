@@ -19,6 +19,8 @@ import type { FailoverReason } from "./embedded-agent-helpers/types.js";
 import { isSessionWriteLockAcquireError } from "./session-write-lock-error.js";
 
 const ABORT_TIMEOUT_RE = /request was aborted|request aborted/i;
+const MISSING_TOOL_RESULT_TEXT =
+  "OpenClaw recorded a native Codex tool.call without a matching tool.result before the turn completed.";
 const MAX_FAILOVER_CAUSE_DEPTH = 25;
 
 /** Structured error used to carry model fallback/failover metadata across layers. */
@@ -344,19 +346,44 @@ function hasEmbeddedAttemptSessionTakeover(err: unknown, seen: Set<object> = new
   );
 }
 
+function hasMissingToolResultFailure(err: unknown, seen: Set<object> = new Set()): boolean {
+  const message = readDirectErrorMessage(err);
+  if (message?.includes(MISSING_TOOL_RESULT_TEXT)) {
+    return true;
+  }
+  if (!err || typeof err !== "object") {
+    return false;
+  }
+  if (seen.has(err)) {
+    return false;
+  }
+  seen.add(err);
+  const candidate = err as { error?: unknown; cause?: unknown; reason?: unknown };
+  return (
+    hasMissingToolResultFailure(candidate.error, seen) ||
+    hasMissingToolResultFailure(candidate.cause, seen) ||
+    hasMissingToolResultFailure(candidate.reason, seen)
+  );
+}
+
 /**
- * True when the error is a local runtime coordination error (session write-lock
- * timeout or embedded attempt session takeover) rather than a provider/model
- * failure. The model fallback chain must abort on these instead of consuming
- * candidate slots — retrying any model would hit the same local condition.
- * See #83510.
+ * True when the error is a local runtime failure (session write-lock timeout,
+ * embedded attempt session takeover, or a synthesized Codex missing tool result)
+ * rather than a provider/model failure. The model fallback chain must abort on
+ * these instead of consuming candidate slots — retrying any model would hit the
+ * same local condition. See #83510 and #95474.
  */
 export function isNonProviderRuntimeCoordinationError(err: unknown): boolean {
-  if (!hasSessionWriteLockContention(err) && !hasEmbeddedAttemptSessionTakeover(err)) {
+  const hasMissingToolResult = hasMissingToolResultFailure(err);
+  if (
+    !hasSessionWriteLockContention(err) &&
+    !hasEmbeddedAttemptSessionTakeover(err) &&
+    !hasMissingToolResult
+  ) {
     return false;
   }
   if (isFailoverError(err)) {
-    return false;
+    return hasMissingToolResult && err.reason === "unknown";
   }
   if (isEmbeddedAttemptSessionTakeover(err)) {
     return true;

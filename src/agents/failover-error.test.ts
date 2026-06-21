@@ -1288,6 +1288,21 @@ describe("failover-error", () => {
       expect(isNonProviderRuntimeCoordinationError(wrappedTakeover)).toBe(true);
     });
 
+    it("returns true for synthesized Codex missing tool result failures (#95474)", () => {
+      const missingToolResult = new Error(
+        "OpenClaw recorded a native Codex tool.call without a matching tool.result before the turn completed. toolCallId=call_1; toolName=bash",
+      );
+      expect(isNonProviderRuntimeCoordinationError(missingToolResult)).toBe(true);
+
+      const wrappedUnknownFailover = new FailoverError(missingToolResult.message, {
+        reason: "unknown",
+        provider: "codex",
+        model: "gpt-5.4",
+        cause: missingToolResult,
+      });
+      expect(isNonProviderRuntimeCoordinationError(wrappedUnknownFailover)).toBe(true);
+    });
+
     it("returns false for plain timeouts and provider errors", () => {
       const timeoutErr = Object.assign(new Error("operation timed out"), { name: "TimeoutError" });
       expect(isNonProviderRuntimeCoordinationError(timeoutErr)).toBe(false);
@@ -1301,6 +1316,18 @@ describe("failover-error", () => {
           message: "upstream quota pressure",
           cause: makeSessionLockError(),
         }),
+      ).toBe(false);
+      expect(
+        isNonProviderRuntimeCoordinationError(
+          new FailoverError(
+            "OpenClaw recorded a native Codex tool.call without a matching tool.result before the turn completed.",
+            {
+              reason: "rate_limit",
+              provider: "codex",
+              model: "gpt-5.4",
+            },
+          ),
+        ),
       ).toBe(false);
       expect(isNonProviderRuntimeCoordinationError(null)).toBe(false);
       expect(isNonProviderRuntimeCoordinationError(undefined)).toBe(false);
