@@ -96,6 +96,52 @@ export function createFeishuApiError(
 const FEISHU_SEND_RATE_LIMIT_CODES = new Set([230020, 11232]);
 const FEISHU_SEND_MAX_RETRIES = 2;
 const FEISHU_SEND_RETRY_BASE_MS = 500;
+const feishuOutboundPacingQueues = new Map<string, Promise<number | undefined>>();
+
+export type FeishuOutboundPacingOptions = {
+  key: string;
+  minIntervalMs?: number;
+};
+
+export function resolveFeishuOutboundPacing(params: {
+  accountId: string;
+  config?: { outboundMinIntervalMs?: number };
+}): FeishuOutboundPacingOptions | undefined {
+  const minIntervalMs = params.config?.outboundMinIntervalMs;
+  if (typeof minIntervalMs !== "number" || !Number.isFinite(minIntervalMs) || minIntervalMs <= 0) {
+    return undefined;
+  }
+  return {
+    key: `feishu:${params.accountId}`,
+    minIntervalMs,
+  };
+}
+
+export async function waitForFeishuOutboundPacing(
+  options: FeishuOutboundPacingOptions | undefined,
+): Promise<void> {
+  const key = options?.key.trim();
+  const minIntervalMs = options?.minIntervalMs;
+  if (!key || minIntervalMs === undefined || minIntervalMs <= 0) {
+    return;
+  }
+
+  const previous = feishuOutboundPacingQueues.get(key) ?? Promise.resolve(undefined);
+  const next = previous
+    .catch(() => undefined)
+    .then(async (lastStartedAt) => {
+      const waitMs =
+        lastStartedAt === undefined ? 0 : Math.max(0, lastStartedAt + minIntervalMs - Date.now());
+      if (waitMs > 0) {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, waitMs);
+        });
+      }
+      return Date.now();
+    });
+  feishuOutboundPacingQueues.set(key, next);
+  await next;
+}
 
 /**
  * Returns a numeric rate-limit signal when an AxiosError indicates a retryable
@@ -144,6 +190,7 @@ export async function requestFeishuApi<T>(
     includeNestedErrorLogId?: boolean;
     /** Base delay per retry attempt in ms; multiplied by attempt index. @internal */
     retryDelayMs?: number;
+    outboundPacing?: FeishuOutboundPacingOptions;
   } = {},
 ): Promise<T> {
   const retryDelayMs = options.retryDelayMs ?? FEISHU_SEND_RETRY_BASE_MS;
@@ -156,6 +203,7 @@ export async function requestFeishuApi<T>(
       });
     }
     try {
+      await waitForFeishuOutboundPacing(options.outboundPacing);
       const result = await request();
       // Feishu SDK may fulfill with a rate-limit body (e.g. { code: 11232, ... })
       // instead of throwing. Classify before returning so retry covers both shapes.

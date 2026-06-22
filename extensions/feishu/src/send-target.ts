@@ -2,12 +2,14 @@
 import type { ClawdbotConfig } from "../runtime-api.js";
 import { resolveFeishuRuntimeAccount } from "./accounts.js";
 import { createFeishuClient } from "./client.js";
+import { resolveFeishuOutboundPacing, type FeishuOutboundPacingOptions } from "./comment-shared.js";
 import { resolveReceiveIdType, normalizeFeishuTarget } from "./targets.js";
 
 type FeishuSendTarget = {
   client: ReturnType<typeof createFeishuClient>;
   receiveId: string;
   receiveIdType: ReturnType<typeof resolveReceiveIdType>;
+  outboundPacing?: FeishuOutboundPacingOptions;
 };
 
 export function resolveFeishuSendTarget(params: {
@@ -32,5 +34,9 @@ export function resolveFeishuSendTarget(params: {
     client,
     receiveId,
     receiveIdType: resolveReceiveIdType(withoutProviderPrefix),
+    outboundPacing: resolveFeishuOutboundPacing({
+      accountId: account.accountId,
+      config: account.config,
+    }),
   };
 }

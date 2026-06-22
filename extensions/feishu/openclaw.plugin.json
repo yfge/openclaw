@@ -171,6 +171,11 @@
           },
           "streaming": { "type": "boolean" },
           "blockStreaming": { "type": "boolean" },
+          "outboundMinIntervalMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 60000
+          },
           "replyInThread": {
             "type": "string",
             "enum": ["disabled", "enabled"]
@@ -208,6 +213,11 @@
       },
       "streaming": { "type": "boolean" },
       "blockStreaming": { "type": "boolean" },
+      "outboundMinIntervalMs": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 60000
+      },
       "replyInThread": {
         "type": "string",
         "enum": ["disabled", "enabled"]

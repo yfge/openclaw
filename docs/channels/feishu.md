@@ -267,6 +267,7 @@ per account.
 ### Message limits
 
 - `textChunkLimit` - outbound text chunk size (default: `2000` chars)
+- `outboundMinIntervalMs` - optional minimum delay between Feishu outbound API calls for the same account (default: `0`, disabled)
 - `mediaMaxMb` - media upload/download limit (default: `30` MB)
 
 ### Streaming
@@ -582,6 +583,7 @@ Full configuration: [Gateway configuration](/gateway/configuration)
 | `channels.feishu.dynamicAgentCreation.agentDirTemplate`  | Agent directory name template                                                    | `~/.openclaw/agents/{agentId}/agent` |
 | `channels.feishu.dynamicAgentCreation.maxAgents`         | Maximum number of dynamic agents to create                                       | unlimited                            |
 | `channels.feishu.textChunkLimit`                         | Message chunk size                                                               | `2000`                               |
+| `channels.feishu.outboundMinIntervalMs`                  | Minimum interval between Feishu outbound API calls for one account               | `0`                                  |
 | `channels.feishu.mediaMaxMb`                             | Media size limit                                                                 | `30`                                 |
 | `channels.feishu.streaming`                              | Streaming card output                                                            | `true`                               |
 | `channels.feishu.blockStreaming`                         | Completed-block reply streaming                                                  | `false`                              |

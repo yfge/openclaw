@@ -10,7 +10,11 @@ import { convertMarkdownTables } from "openclaw/plugin-sdk/text-chunking";
 import type { ClawdbotConfig } from "../runtime-api.js";
 import { resolveFeishuRuntimeAccount } from "./accounts.js";
 import { createFeishuClient } from "./client.js";
-import { requestFeishuApi } from "./comment-shared.js";
+import {
+  requestFeishuApi,
+  resolveFeishuOutboundPacing,
+  type FeishuOutboundPacingOptions,
+} from "./comment-shared.js";
 import type { MentionTarget } from "./mention-target.types.js";
 import { buildMentionedCardContent } from "./mention.js";
 import { parsePostContent } from "./post.js";
@@ -125,6 +129,7 @@ async function sendFallbackDirect(
     msgType: string;
   },
   errorPrefix: string,
+  outboundPacing?: FeishuOutboundPacingOptions,
 ): Promise<FeishuSendResult> {
   const response = await requestFeishuApi(
     () =>
@@ -137,7 +142,7 @@ async function sendFallbackDirect(
         },
       }),
     errorPrefix,
-    { includeNestedErrorLogId: true },
+    { includeNestedErrorLogId: true, outboundPacing },
   );
   assertFeishuMessageApiSuccess(response, errorPrefix);
   return toFeishuSendResult(response, params.receiveId, resolveFeishuReceiptKind(params.msgType));
@@ -159,10 +164,16 @@ async function sendReplyOrFallbackDirect(
     };
     directErrorPrefix: string;
     replyErrorPrefix: string;
+    outboundPacing?: FeishuOutboundPacingOptions;
   },
 ): Promise<FeishuSendResult> {
   if (!params.replyToMessageId) {
-    return sendFallbackDirect(client, params.directParams, params.directErrorPrefix);
+    return sendFallbackDirect(
+      client,
+      params.directParams,
+      params.directErrorPrefix,
+      params.outboundPacing,
+    );
   }
 
   const replyTargetFallbackError =
@@ -185,7 +196,7 @@ async function sendReplyOrFallbackDirect(
           },
         }),
       params.replyErrorPrefix,
-      { includeNestedErrorLogId: true },
+      { includeNestedErrorLogId: true, outboundPacing: params.outboundPacing },
     );
   } catch (err) {
     if (!isWithdrawnReplyError(err)) {
@@ -194,7 +205,12 @@ async function sendReplyOrFallbackDirect(
     if (replyTargetFallbackError) {
       throw replyTargetFallbackError;
     }
-    return sendFallbackDirect(client, params.directParams, params.directErrorPrefix);
+    return sendFallbackDirect(
+      client,
+      params.directParams,
+      params.directErrorPrefix,
+      params.outboundPacing,
+    );
   }
   if (shouldFallbackFromReplyTarget(response)) {
     if (replyTargetFallbackError) {
@@ -609,7 +625,11 @@ export async function sendMessageFeishu(
     mentions,
     accountId,
   } = params;
-  const { client, receiveId, receiveIdType } = resolveFeishuSendTarget({ cfg, to, accountId });
+  const { client, receiveId, receiveIdType, outboundPacing } = resolveFeishuSendTarget({
+    cfg,
+    to,
+    accountId,
+  });
   const tableMode = resolveMarkdownTableMode({
     cfg,
     channel: "feishu",
@@ -629,6 +649,7 @@ export async function sendMessageFeishu(
     directParams,
     directErrorPrefix: "Feishu send failed",
     replyErrorPrefix: "Feishu reply failed",
+    outboundPacing,
   });
 }
 
@@ -646,7 +667,11 @@ export type SendFeishuCardParams = {
 export async function sendCardFeishu(params: SendFeishuCardParams): Promise<FeishuSendResult> {
   const { cfg, to, card, replyToMessageId, replyInThread, allowTopLevelReplyFallback, accountId } =
     params;
-  const { client, receiveId, receiveIdType } = resolveFeishuSendTarget({ cfg, to, accountId });
+  const { client, receiveId, receiveIdType, outboundPacing } = resolveFeishuSendTarget({
+    cfg,
+    to,
+    accountId,
+  });
   const content = JSON.stringify(card);
 
   const directParams = { receiveId, receiveIdType, content, msgType: "interactive" };
@@ -659,6 +684,7 @@ export async function sendCardFeishu(params: SendFeishuCardParams): Promise<Feis
     directParams,
     directErrorPrefix: "Feishu card send failed",
     replyErrorPrefix: "Feishu card reply failed",
+    outboundPacing,
   });
 }
 
@@ -682,13 +708,22 @@ export async function editMessageFeishu(params: {
   }
 
   const client = createFeishuClient(account);
+  const outboundPacing = resolveFeishuOutboundPacing({
+    accountId: account.accountId,
+    config: account.config,
+  });
 
   if (card) {
     const content = JSON.stringify(card);
-    const response = await client.im.message.patch({
-      path: { message_id: messageId },
-      data: { content },
-    });
+    const response = await requestFeishuApi(
+      () =>
+        client.im.message.patch({
+          path: { message_id: messageId },
+          data: { content },
+        }),
+      "Feishu message edit failed",
+      { includeNestedErrorLogId: true, outboundPacing },
+    );
 
     if (response.code !== 0) {
       throw new Error(`Feishu message edit failed: ${response.msg || `code ${response.code}`}`);
@@ -703,10 +738,15 @@ export async function editMessageFeishu(params: {
   });
   const messageText = convertMarkdownTables(text!, tableMode);
   const payload = buildFeishuPostMessagePayload({ messageText });
-  const response = await client.im.message.patch({
-    path: { message_id: messageId },
-    data: { content: payload.content },
-  });
+  const response = await requestFeishuApi(
+    () =>
+      client.im.message.patch({
+        path: { message_id: messageId },
+        data: { content: payload.content },
+      }),
+    "Feishu message edit failed",
+    { includeNestedErrorLogId: true, outboundPacing },
+  );
 
   if (response.code !== 0) {
     throw new Error(`Feishu message edit failed: ${response.msg || `code ${response.code}`}`);

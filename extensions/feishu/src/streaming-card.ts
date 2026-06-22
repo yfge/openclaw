@@ -10,7 +10,7 @@ import {
 } from "openclaw/plugin-sdk/number-runtime";
 import { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
 import { getFeishuUserAgent } from "./client.js";
-import { requestFeishuApi } from "./comment-shared.js";
+import { requestFeishuApi, type FeishuOutboundPacingOptions } from "./comment-shared.js";
 import { resolveFeishuCardTemplate, type CardHeaderConfig } from "./send.js";
 import type { FeishuDomain } from "./types.js";
 
@@ -209,15 +209,22 @@ export class FeishuStreamingSession {
   private queue: Promise<void> = Promise.resolve();
   private closed = false;
   private log?: (msg: string) => void;
+  private outboundPacing?: FeishuOutboundPacingOptions;
   private lastUpdateTime = 0;
   private pendingText: string | null = null;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private updateThrottleMs = STREAMING_UPDATE_THROTTLE_MS;
 
-  constructor(client: Client, creds: Credentials, log?: (msg: string) => void) {
+  constructor(
+    client: Client,
+    creds: Credentials,
+    log?: (msg: string) => void,
+    outboundPacing?: FeishuOutboundPacingOptions,
+  ) {
     this.client = client;
     this.creds = creds;
     this.log = log;
+    this.outboundPacing = outboundPacing;
   }
 
   async start(
@@ -307,6 +314,7 @@ export class FeishuStreamingSession {
             },
           }),
         "Send card failed",
+        { outboundPacing: this.outboundPacing },
       );
     } else if (sendMode === "root_create") {
       // root_id is undeclared in the SDK types but accepted at runtime
@@ -320,6 +328,7 @@ export class FeishuStreamingSession {
             ),
           }),
         "Send card failed",
+        { outboundPacing: this.outboundPacing },
       );
     } else {
       sendRes = await requestFeishuApi(
@@ -333,6 +342,7 @@ export class FeishuStreamingSession {
             },
           }),
         "Send card failed",
+        { outboundPacing: this.outboundPacing },
       );
     }
     if (sendRes.code !== 0 || !sendRes.data?.message_id) {

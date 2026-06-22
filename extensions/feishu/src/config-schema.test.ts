@@ -233,6 +233,26 @@ describe("FeishuConfigSchema optimization flags", () => {
     expect(result.accounts?.main?.typingIndicator).toBe(false);
     expect(result.accounts?.main?.resolveSenderNames).toBe(false);
   });
+
+  it("accepts top-level and account-level outbound pacing", () => {
+    const result = FeishuConfigSchema.parse({
+      outboundMinIntervalMs: 250,
+      accounts: {
+        main: {
+          outboundMinIntervalMs: 1000,
+        },
+      },
+    });
+    expect(result.outboundMinIntervalMs).toBe(250);
+    expect(result.accounts?.main?.outboundMinIntervalMs).toBe(1000);
+  });
+
+  it("rejects negative outbound pacing", () => {
+    const result = FeishuConfigSchema.safeParse({
+      outboundMinIntervalMs: -1,
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("FeishuConfigSchema TTS overrides", () => {

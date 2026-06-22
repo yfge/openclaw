@@ -89,6 +89,10 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("Concurrent Feishu sends — happy path", () => {
   it("all concurrent sends succeed when API responds without errors", async () => {
     const CONCURRENCY = 10;
@@ -284,5 +288,33 @@ describe("Concurrent Feishu sends — timing and ordering", () => {
       expect(result.messageId).toBeTruthy();
     }
     expect(mockClientCreate).toHaveBeenCalledTimes(targets.length);
+  });
+
+  it("paces concurrent sends when outboundMinIntervalMs is configured", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const startedAt: number[] = [];
+    let n = 0;
+    mockResolveFeishuAccount.mockReturnValue({
+      accountId: "default",
+      configured: true,
+      config: { outboundMinIntervalMs: 100 },
+    });
+    mockClientCreate.mockImplementation(() => {
+      startedAt.push(Date.now());
+      return Promise.resolve(okResponse(`om_paced_${n++}`));
+    });
+
+    const settled = Promise.all(
+      Array.from({ length: 3 }, (_, i) =>
+        sendMessageFeishu({ cfg: MOCK_CFG, to: "oc_paced", text: `paced-${i}` }),
+      ),
+    );
+
+    await vi.runAllTimersAsync();
+    await settled;
+
+    expect(mockClientCreate).toHaveBeenCalledTimes(3);
+    expect(startedAt).toEqual([0, 100, 200]);
   });
 });

@@ -9,6 +9,7 @@ import {
   type RuntimeEnv,
 } from "./comment-dispatcher-runtime-api.js";
 import { createCommentTypingReactionLifecycle } from "./comment-reaction.js";
+import { resolveFeishuOutboundPacing, waitForFeishuOutboundPacing } from "./comment-shared.js";
 import type { CommentFileType } from "./comment-target.js";
 import { deliverCommentThreadText } from "./drive.js";
 import { getFeishuRuntime } from "./runtime.js";
@@ -37,6 +38,10 @@ export function createFeishuCommentReplyDispatcher(
   });
   const account = resolveFeishuRuntimeAccount({ cfg: params.cfg, accountId: params.accountId });
   const client = createFeishuClient(account);
+  const outboundPacing = resolveFeishuOutboundPacing({
+    accountId: account.accountId,
+    config: account.config,
+  });
   const textChunkLimit = core.channel.text.resolveTextChunkLimit(
     params.cfg,
     "feishu",
@@ -78,6 +83,7 @@ export function createFeishuCommentReplyDispatcher(
         }
         const chunks = core.channel.text.chunkTextWithMode(reply.text, textChunkLimit, chunkMode);
         for (const chunk of chunks) {
+          await waitForFeishuOutboundPacing(outboundPacing);
           await deliverCommentThreadText(client, {
             file_token: params.fileToken,
             file_type: params.fileType,
