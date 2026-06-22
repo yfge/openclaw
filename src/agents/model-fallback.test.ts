@@ -1873,6 +1873,29 @@ describe("runWithModelFallback", () => {
     });
   });
 
+  it("falls back on upstream_error payloads from providers", async () => {
+    const cfg = makeCfg();
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error(
+          '{"error":{"message":"Upstream request failed","type":"upstream_error","param":"","code":null}}',
+        ),
+      )
+      .mockResolvedValueOnce("ok");
+
+    const result = await runWithModelFallback({
+      cfg,
+      provider: "openai",
+      model: "gpt-4.1-mini",
+      run,
+    });
+
+    expect(result.result).toBe("ok");
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(run.mock.calls[1]?.slice(0, 2)).toEqual(["anthropic", "claude-haiku-3-5"]);
+  });
+
   it("puts configured fallbacks before the configured primary when an override model is requested", () => {
     const cfg = makeCfg({
       agents: {

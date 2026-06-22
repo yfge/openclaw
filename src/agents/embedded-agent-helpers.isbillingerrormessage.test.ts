@@ -1343,6 +1343,11 @@ describe("classifyFailoverReason provider messages", () => {
         '{"type":"error","error":{"type":"api_error","message":"An unexpected error occurred while processing the response"}}',
       ),
     ).toBe("timeout");
+    expect(
+      classifyFailoverReason(
+        '{"error":{"message":"Upstream request failed","type":"upstream_error","param":"","code":null}}',
+      ),
+    ).toBe("timeout");
   });
   it("does not classify non-transient api_error payloads as timeout", () => {
     // Context overflow - not transient

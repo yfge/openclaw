@@ -1628,7 +1628,7 @@ export function isBillingAssistantError(msg: AssistantMessage | undefined): bool
 // Non-transient api_error payloads (context overflow, validation/schema errors)
 // must NOT be classified as timeout.
 const API_ERROR_TRANSIENT_SIGNALS_RE =
-  /internal server error|overload|temporarily unavailable|service unavailable|unknown error|server error|bad gateway|gateway timeout|upstream error|backend error|try again later|temporarily.+unable|unexpected error/i;
+  /internal server error|overload|temporarily unavailable|service unavailable|unknown error|server error|bad gateway|gateway timeout|upstream error|upstream request failed|backend error|try again later|temporarily.+unable|unexpected error/i;
 
 function isJsonApiInternalServerError(raw: string): boolean {
   if (!raw) {
@@ -1639,7 +1639,7 @@ function isJsonApiInternalServerError(raw: string): boolean {
   // {"type":"error","error":{"type":"api_error","message":"Internal server error"}}
   // Non-standard providers (e.g. MiniMax) may use different message text:
   // {"type":"api_error","message":"unknown error, 520 (1000)"}
-  if (!value.includes('"type":"api_error"')) {
+  if (!value.includes('"type":"api_error"') && !value.includes('"type":"upstream_error"')) {
     return false;
   }
   // Billing and auth errors can also carry "type":"api_error". Exclude them so
