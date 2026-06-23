@@ -95,6 +95,11 @@ the response:
   immediately.
 - **Wait for reply:** set a timeout and get the response inline.
 
+When waiting succeeds, the result reports `delivery.status="delivered"` because
+the target session accepted the inter-session message and produced the inline
+reply. Fire-and-forget sends can still report `delivery.status="pending"` while
+the asynchronous follow-up path finishes.
+
 Thread-scoped chat sessions, such as Slack or Discord keys ending in
 `:thread:<id>`, are not valid `sessions_send` targets. Use the parent channel
 session key for inter-agent coordination so tool-routed messages do not appear

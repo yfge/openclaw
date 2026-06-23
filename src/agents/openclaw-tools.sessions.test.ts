@@ -1125,7 +1125,7 @@ describe("sessions tools", () => {
     const waitedDetails = sessionsSendDetails(waited.details);
     expect(waitedDetails.status).toBe("ok");
     expect(waitedDetails.reply).toBe("done");
-    expect(waitedDetails.delivery?.status).toBe("pending");
+    expect(waitedDetails.delivery?.status).toBe("delivered");
     expect(waitedDetails.delivery?.mode).toBe("announce");
     expect(typeof (waited.details as { runId?: string }).runId).toBe("string");
     await waitForCalls(() => agentCallCount, 6);
