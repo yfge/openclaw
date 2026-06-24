@@ -981,6 +981,7 @@ export const dispatchTelegramMessage = async ({
           richMessages: telegramCfg.richMessages,
           minInitialChars: draftMinInitialChars,
           renderText: renderStreamText,
+          preservePreviewHistory: laneName === "answer",
           onSupersededPreview: (superseded) => {
             if (superseded.retain) {
               lanes[laneName].activeChunkIndex += 1;

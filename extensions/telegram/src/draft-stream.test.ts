@@ -602,6 +602,42 @@ describe("createTelegramDraftStream", () => {
     expect(api.raw.editMessageText).not.toHaveBeenCalled();
   });
 
+  it("preserves discrete preview history when enabled", async () => {
+    const api = createMockDraftApi();
+    const stream = createDraftStream(api, { preservePreviewHistory: true });
+
+    stream.updatePreview({ text: "Reading issue" });
+    await stream.flush();
+
+    expectPreviewSend(api, "Reading issue");
+
+    stream.updatePreview({ text: "Checking Telegram draft stream" });
+    await stream.flush();
+
+    expectPreviewEdit(api, "Reading issue\n\nChecking Telegram draft stream");
+    expect(stream.lastDeliveredText?.()).toBe("Reading issue\n\nChecking Telegram draft stream");
+  });
+
+  it("starts a new preserved preview message before history exceeds maxChars", async () => {
+    const api = createMockDraftApi();
+    api.sendMessage
+      .mockResolvedValueOnce({ message_id: 17 })
+      .mockResolvedValueOnce({ message_id: 42 });
+    const stream = createDraftStream(api, { maxChars: 20, preservePreviewHistory: true });
+
+    stream.updatePreview({ text: "Reading issue" });
+    await stream.flush();
+    stream.updatePreview({ text: "Checking stream behavior" });
+    await stream.flush();
+
+    expect(api.sendMessage).toHaveBeenCalledTimes(2);
+    expectNthPreviewSend(api, 1, "Reading issue");
+    const secondPreview = requireSendMessageCallText(api, 1);
+    expect(secondPreview).toMatch(/^Checking stream/u);
+    expect(secondPreview.length).toBeLessThanOrEqual(20);
+    expect(api.editMessageText).not.toHaveBeenCalled();
+  });
+
   it("sends marked progress rich previews through HTML text transport", async () => {
     const api = createMockDraftApi();
     const stream = createDraftStream(api);

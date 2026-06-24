@@ -184,6 +184,8 @@ export function createTelegramDraftStream(params: {
   minInitialChars?: number;
   /** Optional preview renderer (e.g. markdown -> HTML + parse mode). */
   renderText?: (text: string) => TelegramDraftPreview;
+  /** Preserve discrete updatePreview snapshots instead of replacing prior progress. */
+  preservePreviewHistory?: boolean;
   /** Called when a late send resolves after forceNewMessage() switched generations. */
   onSupersededPreview?: (preview: SupersededTelegramPreview) => void;
   log?: (message: string) => void;
@@ -228,6 +230,7 @@ export function createTelegramDraftStream(params: {
   let lastDeliveredText = "";
   let lastRequestedText = "";
   let lastRequestedPreview: TelegramDraftPreview | undefined;
+  let preservedPreviewHistory: TelegramDraftPreview | undefined;
   let previewRevision = 0;
   let generation = 0;
   let deliveredTextOffset = 0;
@@ -481,7 +484,66 @@ export function createTelegramDraftStream(params: {
   };
 
   const update = (text: string) => {
+    preservedPreviewHistory = undefined;
     requestDraftUpdate(text);
+  };
+
+  const joinPreviewParts = (left: string, right: string, separator: string) =>
+    left.trimEnd() ? `${left.trimEnd()}${separator}${right.trimStart()}` : right.trimStart();
+
+  const mergePreviewHistory = (preview: TelegramDraftPreview): TelegramDraftPreview => {
+    const currentText = preview.text.trimEnd();
+    if (!params.preservePreviewHistory || !currentText) {
+      preservedPreviewHistory = undefined;
+      return preview;
+    }
+    const previous = preservedPreviewHistory;
+    if (!previous) {
+      preservedPreviewHistory = { ...preview, text: currentText };
+      return preservedPreviewHistory;
+    }
+    if (currentText.startsWith(previous.text.trimEnd())) {
+      preservedPreviewHistory = { ...preview, text: currentText };
+      return preservedPreviewHistory;
+    }
+    const mergedText = joinPreviewParts(previous.text, currentText, "\n\n");
+    if (mergedText.length > maxChars) {
+      resetStreamToNewMessage();
+      preservedPreviewHistory = { ...preview, text: currentText };
+      return preservedPreviewHistory;
+    }
+    if (preview.richMessage?.html || previous.richMessage?.html) {
+      const previousHtml = previous.richMessage?.html ?? previous.text;
+      const currentHtml = preview.richMessage?.html ?? currentText;
+      const mergedPreview: TelegramDraftPreview = {
+        ...preview,
+        text: mergedText,
+        richMessage: {
+          html: joinPreviewParts(previousHtml, currentHtml, "<br><br>"),
+          is_rtl: preview.richMessage?.is_rtl,
+          skip_entity_detection: preview.richMessage?.skip_entity_detection,
+        },
+      };
+      preservedPreviewHistory = mergedPreview;
+      return mergedPreview;
+    }
+    if (preview.richMessage?.markdown || previous.richMessage?.markdown) {
+      const previousMarkdown = previous.richMessage?.markdown ?? previous.text;
+      const currentMarkdown = preview.richMessage?.markdown ?? currentText;
+      const mergedPreview: TelegramDraftPreview = {
+        ...preview,
+        text: mergedText,
+        richMessage: {
+          markdown: joinPreviewParts(previousMarkdown, currentMarkdown, "\n\n"),
+          is_rtl: preview.richMessage?.is_rtl,
+          skip_entity_detection: preview.richMessage?.skip_entity_detection,
+        },
+      };
+      preservedPreviewHistory = mergedPreview;
+      return mergedPreview;
+    }
+    preservedPreviewHistory = { ...preview, text: mergedText };
+    return preservedPreviewHistory;
   };
 
   const updatePreview = (preview: TelegramDraftPreview) => {
@@ -489,7 +551,8 @@ export function createTelegramDraftStream(params: {
     if (!text) {
       return;
     }
-    requestDraftUpdate(text, { ...preview, text });
+    const merged = mergePreviewHistory({ ...preview, text });
+    requestDraftUpdate(merged.text, merged);
   };
 
   const stop = async () => {
@@ -505,11 +568,11 @@ export function createTelegramDraftStream(params: {
     streamState.final = true;
   };
 
-  const resetStreamToNewMessage: (options?: {
+  function resetStreamToNewMessage(options?: {
     keepFinal?: boolean;
     keepPending?: boolean;
     resetOffset?: boolean;
-  }) => void = (options) => {
+  }): void {
     streamState.stopped = false;
     streamState.final = options?.keepFinal === true;
     generation += 1;
@@ -521,12 +584,13 @@ export function createTelegramDraftStream(params: {
       deliveredTextOffset = 0;
       lastRequestedText = "";
     }
+    preservedPreviewHistory = undefined;
     if (!options?.keepPending) {
       loop.resetPending();
       lastRequestedPreview = undefined;
     }
     loop.resetThrottleWindow();
-  };
+  }
 
   const clear = async () => {
     const messageId = await takeMessageIdAfterStop({
