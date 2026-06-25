@@ -17,6 +17,7 @@ export {
 } from "../infra/net/ssrf.js";
 export { formatErrorMessage } from "../infra/errors.js";
 export { fetchWithSsrFGuard } from "../infra/net/fetch-guard.js";
+export { registerManagedProxyBrowserCdpBypass } from "../infra/net/proxy/proxy-lifecycle.js";
 export {
   assertHttpUrlTargetsPrivateNetwork,
   buildHostnameAllowlistPolicyFromSuffixAllowlist,
