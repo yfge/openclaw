@@ -1,10 +1,13 @@
 // Feishu plugin module implements secret contract behavior.
 import {
   collectConditionalChannelFieldAssignments,
-  collectSimpleChannelFieldAssignments,
+  collectSecretInputAssignment,
   getChannelSurface,
+  hasConfiguredSecretInputValue,
   hasOwnProperty,
+  isBaseFieldActiveForChannelSurface,
   normalizeSecretStringValue,
+  type ChannelAccountSurface,
   type ResolverContext,
   type SecretDefaults,
   type SecretTargetRegistryEntry,
@@ -79,6 +82,59 @@ export const secretTargetRegistryEntries: SecretTargetRegistryEntry[] = [
   },
 ];
 
+function hasImplicitTopLevelDefaultAccount(
+  feishu: Record<string, unknown>,
+  defaults: SecretDefaults | undefined,
+): boolean {
+  return (
+    hasConfiguredSecretInputValue(feishu.appId, defaults) &&
+    hasConfiguredSecretInputValue(feishu.appSecret, defaults)
+  );
+}
+
+function collectFeishuAppSecretAssignments(params: {
+  feishu: Record<string, unknown>;
+  surface: ChannelAccountSurface;
+  defaults?: SecretDefaults;
+  context: ResolverContext;
+}): void {
+  collectSecretInputAssignment({
+    value: params.feishu.appSecret,
+    path: "channels.feishu.appSecret",
+    expected: "string",
+    defaults: params.defaults,
+    context: params.context,
+    active:
+      params.surface.channelEnabled &&
+      (isBaseFieldActiveForChannelSurface(params.surface, "appSecret") ||
+        hasImplicitTopLevelDefaultAccount(params.feishu, params.defaults)),
+    inactiveReason: "no enabled account inherits this top-level Feishu appSecret.",
+    apply: (value) => {
+      params.feishu.appSecret = value;
+    },
+  });
+  if (!params.surface.hasExplicitAccounts) {
+    return;
+  }
+  for (const { accountId, account, enabled } of params.surface.accounts) {
+    if (!hasOwnProperty(account, "appSecret")) {
+      continue;
+    }
+    collectSecretInputAssignment({
+      value: account.appSecret,
+      path: `channels.feishu.accounts.${accountId}.appSecret`,
+      expected: "string",
+      defaults: params.defaults,
+      context: params.context,
+      active: enabled,
+      inactiveReason: "Feishu account is disabled.",
+      apply: (value) => {
+        account.appSecret = value;
+      },
+    });
+  }
+}
+
 export function collectRuntimeConfigAssignments(params: {
   config: { channels?: Record<string, unknown> };
   defaults?: SecretDefaults;
@@ -89,15 +145,11 @@ export function collectRuntimeConfigAssignments(params: {
     return;
   }
   const { channel: feishu, surface } = resolved;
-  collectSimpleChannelFieldAssignments({
-    channelKey: "feishu",
-    field: "appSecret",
-    channel: feishu,
+  collectFeishuAppSecretAssignments({
+    feishu,
     surface,
     defaults: params.defaults,
     context: params.context,
-    topInactiveReason: "no enabled account inherits this top-level Feishu appSecret.",
-    accountInactiveReason: "Feishu account is disabled.",
   });
   const baseConnectionMode =
     normalizeSecretStringValue(feishu.connectionMode) === "webhook" ? "webhook" : "websocket";

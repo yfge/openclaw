@@ -401,6 +401,39 @@ describe("secrets runtime externalized channel SecretRef audit", () => {
     },
   );
 
+  it("resolves the top-level Feishu appSecret for the implicit default account", async () => {
+    const records = configureExternalChannelRecords(["feishu"]);
+    const snapshot = await prepareSecretsRuntimeSnapshot({
+      config: asConfig({
+        channels: {
+          feishu: {
+            enabled: true,
+            appId: "cli_default",
+            appSecret: ref("FEISHU_APP_SECRET"),
+            accounts: {
+              work: {
+                enabled: true,
+                appId: "cli_work",
+                appSecret: "work-inline-secret", // pragma: allowlist secret
+              },
+            },
+          },
+        },
+      }),
+      env: {
+        FEISHU_APP_SECRET: "feishu-default-secret",
+      },
+      includeAuthStoreRefs: false,
+      loadablePluginOrigins: externalChannelOrigins(records),
+    });
+
+    expect(getPath(snapshot.config, ["channels", "feishu", "appSecret"])).toBe(
+      "feishu-default-secret",
+    );
+    expect(snapshot.warnings).toStrictEqual([]);
+    expectMetadataBackedContractsWereUsed(["feishu"]);
+  });
+
   it("skips inactive exec-backed SecretRefs for every externalized channel contract", async () => {
     const records = configureExternalChannelRecords();
     const config = asConfig({
