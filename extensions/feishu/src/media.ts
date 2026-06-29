@@ -523,17 +523,18 @@ export async function sendImageFeishu(params: {
   accountId?: string;
 }): Promise<SendMediaResult> {
   const { cfg, to, imageKey, replyToMessageId, replyInThread, accountId } = params;
-  const { client, receiveId, receiveIdType } = resolveFeishuSendTarget({
+  const target = resolveFeishuSendTarget({
     cfg,
     to,
     accountId,
   });
+  const { receiveId, receiveIdType } = target;
   const content = JSON.stringify({ image_key: imageKey });
 
   if (replyToMessageId) {
     const response = await requestFeishuApi(
       () =>
-        client.im.message.reply({
+        target.getClient().im.message.reply({
           path: { message_id: replyToMessageId },
           data: {
             content,
@@ -542,7 +543,7 @@ export async function sendImageFeishu(params: {
           },
         }),
       "Feishu image reply failed",
-      { includeNestedErrorLogId: true },
+      { includeNestedErrorLogId: true, onInvalidToken: target.resetClient },
     );
     assertFeishuMessageApiSuccess(response, "Feishu image reply failed");
     return toFeishuSendResult(response, receiveId, "media");
@@ -550,7 +551,7 @@ export async function sendImageFeishu(params: {
 
   const response = await requestFeishuApi(
     () =>
-      client.im.message.create({
+      target.getClient().im.message.create({
         params: { receive_id_type: receiveIdType },
         data: {
           receive_id: receiveId,
@@ -559,7 +560,7 @@ export async function sendImageFeishu(params: {
         },
       }),
     "Feishu image send failed",
-    { includeNestedErrorLogId: true },
+    { includeNestedErrorLogId: true, onInvalidToken: target.resetClient },
   );
   assertFeishuMessageApiSuccess(response, "Feishu image send failed");
   return toFeishuSendResult(response, receiveId, "media");
@@ -580,17 +581,18 @@ export async function sendFileFeishu(params: {
 }): Promise<SendMediaResult> {
   const { cfg, to, fileKey, replyToMessageId, replyInThread, accountId } = params;
   const msgType = params.msgType ?? "file";
-  const { client, receiveId, receiveIdType } = resolveFeishuSendTarget({
+  const target = resolveFeishuSendTarget({
     cfg,
     to,
     accountId,
   });
+  const { receiveId, receiveIdType } = target;
   const content = JSON.stringify({ file_key: fileKey });
 
   if (replyToMessageId) {
     const response = await requestFeishuApi(
       () =>
-        client.im.message.reply({
+        target.getClient().im.message.reply({
           path: { message_id: replyToMessageId },
           data: {
             content,
@@ -599,7 +601,7 @@ export async function sendFileFeishu(params: {
           },
         }),
       "Feishu file reply failed",
-      { includeNestedErrorLogId: true },
+      { includeNestedErrorLogId: true, onInvalidToken: target.resetClient },
     );
     assertFeishuMessageApiSuccess(response, "Feishu file reply failed");
     return toFeishuSendResult(response, receiveId, resolveFeishuReceiptKind(msgType));
@@ -607,7 +609,7 @@ export async function sendFileFeishu(params: {
 
   const response = await requestFeishuApi(
     () =>
-      client.im.message.create({
+      target.getClient().im.message.create({
         params: { receive_id_type: receiveIdType },
         data: {
           receive_id: receiveId,
@@ -616,7 +618,7 @@ export async function sendFileFeishu(params: {
         },
       }),
     "Feishu file send failed",
-    { includeNestedErrorLogId: true },
+    { includeNestedErrorLogId: true, onInvalidToken: target.resetClient },
   );
   assertFeishuMessageApiSuccess(response, "Feishu file send failed");
   return toFeishuSendResult(response, receiveId, resolveFeishuReceiptKind(msgType));

@@ -8,6 +8,7 @@ const {
   mockClientGet,
   mockClientList,
   mockClientPatch,
+  mockClearClientCache,
   mockCreateFeishuClient,
   mockResolveMarkdownTableMode,
   mockResolveFeishuAccount,
@@ -18,6 +19,7 @@ const {
   mockClientGet: vi.fn(),
   mockClientList: vi.fn(),
   mockClientPatch: vi.fn(),
+  mockClearClientCache: vi.fn(),
   mockCreateFeishuClient: vi.fn(),
   mockResolveMarkdownTableMode: vi.fn(() => "preserve"),
   mockResolveFeishuAccount: vi.fn(),
@@ -38,6 +40,7 @@ vi.mock("openclaw/plugin-sdk/text-chunking", async (importOriginal) => {
 });
 
 vi.mock("./client.js", () => ({
+  clearClientCache: mockClearClientCache,
   createFeishuClient: mockCreateFeishuClient,
 }));
 
@@ -134,6 +137,7 @@ describe("getMessageFeishu", () => {
     mockConvertMarkdownTables.mockImplementation((text: string) => text);
     mockRuntimeResolveMarkdownTableMode.mockReturnValue("preserve");
     mockRuntimeConvertMarkdownTables.mockImplementation((text: string) => text);
+    mockClearClientCache.mockReset();
     mockResolveFeishuAccount.mockReturnValue({
       accountId: "default",
       configured: true,
@@ -291,6 +295,53 @@ describe("getMessageFeishu", () => {
         ],
       },
     });
+  });
+
+  it("refreshes the cached client once when Feishu reports an invalid tenant token", async () => {
+    const staleCreate = vi.fn().mockRejectedValue(
+      Object.assign(new Error("Request failed with status code 400"), {
+        response: { status: 400, data: { code: 99991663, msg: "Invalid access token" } },
+      }),
+    );
+    const freshCreate = vi.fn().mockResolvedValue({ code: 0, data: { message_id: "om_fresh" } });
+    const staleClient = {
+      im: {
+        message: {
+          create: staleCreate,
+          reply: vi.fn(),
+          get: mockClientGet,
+          list: mockClientList,
+          patch: mockClientPatch,
+        },
+      },
+    };
+    const freshClient = {
+      im: {
+        message: {
+          create: freshCreate,
+          reply: vi.fn(),
+          get: mockClientGet,
+          list: mockClientList,
+          patch: mockClientPatch,
+        },
+      },
+    };
+    let cacheCleared = false;
+    mockClearClientCache.mockImplementationOnce(() => {
+      cacheCleared = true;
+    });
+    mockCreateFeishuClient.mockImplementation(() => (cacheCleared ? freshClient : staleClient));
+
+    const result = await sendMessageFeishu({
+      cfg: {} as ClawdbotConfig,
+      to: "oc_send",
+      text: "hello",
+    });
+
+    expect(mockClearClientCache).toHaveBeenCalledWith("default");
+    expect(staleCreate).toHaveBeenCalledTimes(1);
+    expect(freshCreate).toHaveBeenCalledTimes(1);
+    expect(result.messageId).toBe("om_fresh");
   });
 
   it("extracts text content from interactive card elements", async () => {

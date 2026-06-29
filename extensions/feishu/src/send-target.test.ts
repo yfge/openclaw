@@ -4,6 +4,7 @@ import type { ClawdbotConfig } from "../runtime-api.js";
 
 const resolveFeishuAccountMock = vi.hoisted(() => vi.fn());
 const createFeishuClientMock = vi.hoisted(() => vi.fn());
+const clearClientCacheMock = vi.hoisted(() => vi.fn());
 
 vi.mock("./accounts.js", () => ({
   resolveFeishuAccount: resolveFeishuAccountMock,
@@ -11,6 +12,7 @@ vi.mock("./accounts.js", () => ({
 }));
 
 vi.mock("./client.js", () => ({
+  clearClientCache: clearClientCacheMock,
   createFeishuClient: createFeishuClientMock,
 }));
 
@@ -36,6 +38,7 @@ describe("resolveFeishuSendTarget", () => {
       enabled: true,
       configured: true,
     });
+    clearClientCacheMock.mockReset();
     createFeishuClientMock.mockReset().mockReturnValue(client);
   });
 
@@ -48,6 +51,19 @@ describe("resolveFeishuSendTarget", () => {
     expect(result.receiveId).toBe("group_room_alpha");
     expect(result.receiveIdType).toBe("chat_id");
     expect(result.client).toBe(client);
+  });
+
+  it("clears the resolved account cache before recreating a client", () => {
+    const result = resolveFeishuSendTarget({
+      cfg,
+      to: "feishu:group:group_room_alpha",
+    });
+
+    result.resetClient();
+    result.getClient();
+
+    expect(clearClientCacheMock).toHaveBeenCalledWith("default");
+    expect(createFeishuClientMock).toHaveBeenCalledTimes(2);
   });
 
   it("maps dm-prefixed open IDs to open_id", () => {

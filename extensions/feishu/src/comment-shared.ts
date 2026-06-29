@@ -94,6 +94,7 @@ export function createFeishuApiError(
 // 11232: tenant-level "create message service trigger rate limit" (100/min, 5/sec per app/bot).
 // Distinct from FEISHU_BACKOFF_CODES in typing.ts, which covers the reaction API (99991400+).
 const FEISHU_SEND_RATE_LIMIT_CODES = new Set([230020, 11232]);
+const FEISHU_TOKEN_INVALID_CODES = new Set([99991663, 99991664]);
 const FEISHU_SEND_MAX_RETRIES = 2;
 const FEISHU_SEND_RETRY_BASE_MS = 500;
 
@@ -117,6 +118,16 @@ export function getFeishuSendRateLimitCode(error: unknown): number | undefined {
   const data = isRecord(response?.data) ? response.data : undefined;
   const code = data?.code;
   return typeof code === "number" && FEISHU_SEND_RATE_LIMIT_CODES.has(code) ? code : undefined;
+}
+
+export function getFeishuTokenInvalidCode(error: unknown): number | undefined {
+  if (!isRecord(error)) {
+    return undefined;
+  }
+  const response = isRecord(error.response) ? error.response : undefined;
+  const data = isRecord(response?.data) ? response.data : undefined;
+  const code = data?.code;
+  return typeof code === "number" && FEISHU_TOKEN_INVALID_CODES.has(code) ? code : undefined;
 }
 
 /**
@@ -144,6 +155,8 @@ export async function requestFeishuApi<T>(
     includeNestedErrorLogId?: boolean;
     /** Base delay per retry attempt in ms; multiplied by attempt index. @internal */
     retryDelayMs?: number;
+    /** Called before the single retry for an invalid cached tenant token. */
+    onInvalidToken?: () => void | Promise<void>;
   } = {},
 ): Promise<T> {
   const retryDelayMs = options.retryDelayMs ?? FEISHU_SEND_RETRY_BASE_MS;
@@ -172,6 +185,14 @@ export async function requestFeishuApi<T>(
       }
       return result;
     } catch (error) {
+      const isInvalidToken =
+        attempt === 0 &&
+        getFeishuTokenInvalidCode(error) !== undefined &&
+        options.onInvalidToken !== undefined;
+      if (isInvalidToken) {
+        await options.onInvalidToken?.();
+        continue;
+      }
       const isRetryable =
         attempt < FEISHU_SEND_MAX_RETRIES && getFeishuSendRateLimitCode(error) !== undefined;
       if (!isRetryable) {

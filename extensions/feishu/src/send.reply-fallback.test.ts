@@ -28,6 +28,24 @@ describe("Feishu reply fallback for withdrawn/deleted targets", () => {
   const replyMock = vi.fn();
   const createMock = vi.fn();
 
+  function makeSendTarget(receiveId = "ou_target", receiveIdType = "open_id") {
+    const client = {
+      im: {
+        message: {
+          reply: replyMock,
+          create: createMock,
+        },
+      },
+    };
+    return {
+      client,
+      getClient: () => client,
+      resetClient: vi.fn(),
+      receiveId,
+      receiveIdType,
+    };
+  }
+
   async function expectFallbackResult(
     send: () => Promise<{ messageId?: string }>,
     expectedMessageId: string,
@@ -50,18 +68,7 @@ describe("Feishu reply fallback for withdrawn/deleted targets", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resolveFeishuSendTargetMock.mockReturnValue({
-      client: {
-        im: {
-          message: {
-            reply: replyMock,
-            create: createMock,
-          },
-        },
-      },
-      receiveId: "ou_target",
-      receiveIdType: "open_id",
-    });
+    resolveFeishuSendTargetMock.mockReturnValue(makeSendTarget());
   });
 
   it("preserves Feishu diagnostics when direct sends reject before response checks", async () => {
@@ -213,18 +220,7 @@ describe("Feishu reply fallback for withdrawn/deleted targets", () => {
   });
 
   it("falls back to a top-level group send when normal quoted replies target withdrawn messages", async () => {
-    resolveFeishuSendTargetMock.mockReturnValue({
-      client: {
-        im: {
-          message: {
-            reply: replyMock,
-            create: createMock,
-          },
-        },
-      },
-      receiveId: "oc_group_1",
-      receiveIdType: "chat_id",
-    });
+    resolveFeishuSendTargetMock.mockReturnValue(makeSendTarget("oc_group_1", "chat_id"));
     replyMock.mockResolvedValue({
       code: 230011,
       msg: "The message was withdrawn.",
@@ -266,18 +262,7 @@ describe("Feishu reply fallback for withdrawn/deleted targets", () => {
   });
 
   it("falls back to create when normal quoted replies throw withdrawn errors", async () => {
-    resolveFeishuSendTargetMock.mockReturnValue({
-      client: {
-        im: {
-          message: {
-            reply: replyMock,
-            create: createMock,
-          },
-        },
-      },
-      receiveId: "oc_group_1",
-      receiveIdType: "chat_id",
-    });
+    resolveFeishuSendTargetMock.mockReturnValue(makeSendTarget("oc_group_1", "chat_id"));
     const sdkError = Object.assign(new Error("request failed"), { code: 230011 });
     replyMock.mockRejectedValue(sdkError);
     createMock.mockResolvedValue({

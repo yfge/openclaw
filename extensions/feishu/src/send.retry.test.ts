@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   getFeishuSendRateLimitCode,
   getFeishuSendRateLimitCodeFromResponse,
+  getFeishuTokenInvalidCode,
   requestFeishuApi,
 } from "./comment-shared.js";
 
@@ -59,6 +60,18 @@ describe("getFeishuSendRateLimitCode", () => {
 
   it("returns undefined for null", () => {
     expect(getFeishuSendRateLimitCode(null)).toBeUndefined();
+  });
+});
+
+describe("getFeishuTokenInvalidCode", () => {
+  it("returns Feishu invalid-token codes", () => {
+    expect(getFeishuTokenInvalidCode(axiosError(99991663))).toBe(99991663);
+    expect(getFeishuTokenInvalidCode(axiosError(99991664))).toBe(99991664);
+  });
+
+  it("returns undefined for ordinary Feishu errors", () => {
+    expect(getFeishuTokenInvalidCode(axiosError(230001))).toBeUndefined();
+    expect(getFeishuTokenInvalidCode(new Error("boom"))).toBeUndefined();
   });
 });
 
@@ -120,6 +133,43 @@ describe("requestFeishuApi — retry on rate-limit", () => {
     const result = await requestFeishuApi(request, "prefix", NO_DELAY);
     expect(result).toBe("ok-third");
     expect(request).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("requestFeishuApi — retry on invalid tenant token", () => {
+  it("invalidates the token source once and succeeds on retry", async () => {
+    const onInvalidToken = vi.fn();
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(axiosError(99991663))
+      .mockResolvedValueOnce("ok-after-token-refresh");
+
+    const result = await requestFeishuApi(request, "prefix", {
+      ...NO_DELAY,
+      onInvalidToken,
+    });
+
+    expect(result).toBe("ok-after-token-refresh");
+    expect(onInvalidToken).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry invalid-token errors without an invalidation hook", async () => {
+    const request = vi.fn().mockRejectedValue(axiosError(99991663));
+
+    await expect(requestFeishuApi(request, "prefix", NO_DELAY)).rejects.toThrow();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not loop on persistent invalid-token errors", async () => {
+    const onInvalidToken = vi.fn();
+    const request = vi.fn().mockRejectedValue(axiosError(99991664));
+
+    await expect(
+      requestFeishuApi(request, "Feishu send failed", { ...NO_DELAY, onInvalidToken }),
+    ).rejects.toThrow(/99991664/);
+    expect(onInvalidToken).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledTimes(2);
   });
 });
 

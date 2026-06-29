@@ -7,6 +7,7 @@ Docs: https://docs.openclaw.ai
 ### Fixes
 
 - **WeChat account routing:** `startAccount` preserves session routing by resolving manifest channel account config from raw account keys with opaque provider ids, while still ignoring manifest account keys that normalize to blocked object keys. (#93686) Thanks @zhangguiping-xydt.
+- Feishu: refresh the cached SDK client and retry once when Feishu reports an invalid tenant token, so outgoing replies can recover without a gateway restart. Fixes #97287.
 
 ## 2026.6.10
 
@@ -96,6 +97,7 @@ Automatic fast mode starts short conversations quickly, then returns longer or f
 #### Doctor check ordering
 
 - Keeps core [`openclaw doctor`](https://docs.openclaw.ai/gateway/doctor) diagnostics in their normal order before extension checks, making lint and repair output easier to follow. [PR #86627](https://github.com/openclaw/openclaw/pull/86627). Thanks @giodl73-repo.
+
 ## 2026.6.9
 
 ### Highlights
