@@ -105,6 +105,37 @@ describe("buildFeishuPostMessagePayload", () => {
       },
     });
   });
+
+  it("upgrades single markdown newlines for Feishu post rendering", () => {
+    const payload = buildFeishuPostMessagePayload({
+      messageText: "first line\nsecond line\n\nthird paragraph",
+    });
+
+    expect(JSON.parse(payload.content)).toEqual({
+      zh_cn: {
+        content: [[{ tag: "md", text: "first line\n\nsecond line\n\nthird paragraph" }]],
+      },
+    });
+  });
+
+  it("preserves fenced code block line breaks while materializing surrounding breaks", () => {
+    const payload = buildFeishuPostMessagePayload({
+      messageText: "before\n```ts\nconst a = 1;\nconst b = 2;\n```\nafter",
+    });
+
+    expect(JSON.parse(payload.content)).toEqual({
+      zh_cn: {
+        content: [
+          [
+            {
+              tag: "md",
+              text: "before\n\n```ts\nconst a = 1;\nconst b = 2;\n```\n\nafter",
+            },
+          ],
+        ],
+      },
+    });
+  });
 });
 
 describe("getMessageFeishu", () => {

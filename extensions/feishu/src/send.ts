@@ -550,6 +550,23 @@ type FeishuPostMessageElement =
   | { tag: "at"; user_id: string; user_name?: string }
   | { tag: "md"; text: string };
 
+function preserveFeishuPostMarkdownLineBreaks(text: string): string {
+  if (!text.includes("\n")) {
+    return text;
+  }
+
+  const parts = text.split(/(```[\s\S]*?```)/g);
+  return parts
+    .map((part, index) => {
+      const isFencedCodeBlock = index % 2 === 1;
+      if (isFencedCodeBlock) {
+        return part;
+      }
+      return part.replace(/(?<!\n)\n(?!\n)/g, "\n\n");
+    })
+    .join("");
+}
+
 function buildFeishuPostMentionElements(mentions?: MentionTarget[]): FeishuPostMessageElement[] {
   if (!mentions?.length) {
     return [];
@@ -583,7 +600,7 @@ export function buildFeishuPostMessagePayload(params: {
     ...buildFeishuPostMentionElements(mentions),
     {
       tag: "md",
-      text: messageText,
+      text: preserveFeishuPostMarkdownLineBreaks(messageText),
     },
   ];
   return {
