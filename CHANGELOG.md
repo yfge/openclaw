@@ -6,6 +6,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- **Cron:** isolated agent jobs now apply configured model fallbacks when the primary embedded run returns a fallback-safe incomplete or reasoning-only result, so scheduled answers are no longer replaced by generic failure text. Fixes #96525. Thanks @yetval.
 - **WeChat account routing:** `startAccount` preserves session routing by resolving manifest channel account config from raw account keys with opaque provider ids, while still ignoring manifest account keys that normalize to blocked object keys. (#93686) Thanks @zhangguiping-xydt.
 
 ## 2026.6.11

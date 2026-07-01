@@ -2,6 +2,10 @@
 import { createHash } from "node:crypto";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import type { BootstrapContextMode } from "../../agents/bootstrap-files.js";
+import {
+  classifyEmbeddedAgentRunResultForModelFallback,
+  mergeEmbeddedAgentRunResultForModelFallbackExhaustion,
+} from "../../agents/embedded-agent-runner/result-fallback-classifier.js";
 import type { FastModeAutoProgressState } from "../../agents/fast-mode.js";
 import { resolveCliRuntimeExecutionProvider } from "../../agents/model-runtime-aliases.js";
 import { wrapUntrustedPromptDataBlock } from "../../agents/sanitize-for-prompt.js";
@@ -280,6 +284,7 @@ export function createCronPromptExecutor(params: {
   });
 
   const runPrompt = async (promptText: string) => {
+    let lastFallbackAttemptRuntime: "cli" | "embedded" | undefined;
     const modelPrompt = deliveryTargetRuntimeContext
       ? `${promptText}\n\n${deliveryTargetRuntimeContext}`.trim()
       : promptText;
@@ -306,6 +311,13 @@ export function createCronPromptExecutor(params: {
         });
       },
       fallbacksOverride: cronFallbacksOverride,
+      classifyResult: ({ provider, model, result }) => {
+        if (lastFallbackAttemptRuntime !== "embedded") {
+          return undefined;
+        }
+        return classifyEmbeddedAgentRunResultForModelFallback({ provider, model, result });
+      },
+      mergeExhaustedResult: mergeEmbeddedAgentRunResultForModelFallbackExhaustion,
       run: async (providerOverride, modelOverride, runOptions) => {
         if (params.abortSignal?.aborted) {
           throw new Error(params.abortReason());
@@ -322,6 +334,7 @@ export function createCronPromptExecutor(params: {
         // CLI providers can resume provider-native sessions; embedded providers
         // use OpenClaw's transcript/session file plus prompt-cache affinity.
         if (isCliProvider(executionProvider, params.cfgWithAgentDefaults)) {
+          lastFallbackAttemptRuntime = "cli";
           const cliSessionId = params.cronSession.isNewSession
             ? undefined
             : await getCliSessionId(params.cronSession.sessionEntry, executionProvider);
@@ -369,6 +382,7 @@ export function createCronPromptExecutor(params: {
           );
           return result;
         }
+        lastFallbackAttemptRuntime = "embedded";
         const { resolveFastModeState, runEmbeddedAgent } = await loadCronEmbeddedRuntime();
         const promptCacheKey = resolveIsolatedCronPromptCacheKey({
           job: params.job,

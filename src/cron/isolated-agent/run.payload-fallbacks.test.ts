@@ -20,12 +20,16 @@ function requireModelFallbackRequest(): {
   fallbacksOverride?: string[];
   provider?: string;
   model?: string;
+  classifyResult?: (params: { provider: string; model: string; result: unknown }) => unknown;
+  mergeExhaustedResult?: unknown;
 } {
   const request = runWithModelFallbackMock.mock.calls[0]?.[0] as
     | {
         fallbacksOverride?: string[];
         provider?: string;
         model?: string;
+        classifyResult?: (params: { provider: string; model: string; result: unknown }) => unknown;
+        mergeExhaustedResult?: unknown;
       }
     | undefined;
   if (!request) {
@@ -186,5 +190,70 @@ describe("runCronIsolatedAgentTurn — payload.fallbacks", () => {
     expect(runEmbeddedAgentMock.mock.calls[0]?.[0]).toMatchObject({
       modelFallbacksOverride: ["openai/gpt-5.2", "zai/glm-5"],
     });
+  });
+
+  it("classifies fallback-safe embedded results so cron advances to the configured fallback", async () => {
+    const primaryResult = {
+      payloads: [{ text: "Agent couldn't generate a response.", isError: true }],
+      meta: {
+        agentHarnessResultClassification: "reasoning-only",
+        error: {
+          kind: "incomplete_turn",
+          message: "Agent couldn't generate a response.",
+          fallbackSafe: true,
+          terminalPresentation: false,
+        },
+      },
+    };
+    const fallbackResult = {
+      payloads: [{ text: "Workspace cleaned up: removed 12 stale files." }],
+      meta: {
+        agentMeta: {},
+        finalAssistantVisibleText: "Workspace cleaned up: removed 12 stale files.",
+      },
+    };
+    resolveConfiguredModelRefMock.mockReturnValue({
+      provider: "anthropic",
+      model: "claude-opus-4-6",
+    });
+    runEmbeddedAgentMock.mockResolvedValueOnce(primaryResult).mockResolvedValueOnce(fallbackResult);
+    runWithModelFallbackMock.mockImplementation(
+      async ({ provider, model, run, classifyResult, mergeExhaustedResult }) => {
+        expect(mergeExhaustedResult).toBeTypeOf("function");
+        const firstResult = await run(provider, model);
+        const classification = classifyResult?.({ provider, model, result: firstResult });
+        if (!classification) {
+          return { result: firstResult, provider, model, attempts: [] };
+        }
+        const secondResult = await run("openai", "gpt-5.4");
+        return {
+          result: secondResult,
+          provider: "openai",
+          model: "gpt-5.4",
+          attempts: [{ provider, model, error: classification }],
+          outcome: "completed",
+        };
+      },
+    );
+
+    const result = await runCronIsolatedAgentTurn(
+      makeIsolatedAgentParamsFixture({
+        job: makeIsolatedAgentJobFixture({
+          payload: {
+            kind: "agentTurn",
+            message: "clean workspace",
+            model: "anthropic/claude-opus-4-6",
+            fallbacks: ["openai/gpt-5.4"],
+          },
+        }),
+      }),
+    );
+
+    expect(result.status).toBe("ok");
+    expect(runEmbeddedAgentMock).toHaveBeenCalledTimes(2);
+    const fallbackRequest = requireModelFallbackRequest();
+    expect(fallbackRequest.fallbacksOverride).toEqual(["openai/gpt-5.4"]);
+    expect(fallbackRequest.classifyResult).toBeTypeOf("function");
+    expect(fallbackRequest.mergeExhaustedResult).toBeTypeOf("function");
   });
 });
