@@ -219,6 +219,8 @@ describe("createCronToolSchema", () => {
           agentId: null,
           sessionKey: null,
           payload: {
+            model: null,
+            fallbacks: null,
             toolsAllow: null,
           },
         },
@@ -242,7 +244,7 @@ describe("createCronToolSchema", () => {
     expect(jobProps?.sessionKey?.description).toMatch(/null to clear it/i);
   });
 
-  it("patch.payload.toolsAllow projects to plain array type for OpenAPI 3.0 compat", () => {
+  it("patch.payload nullable agentTurn overrides project to OpenAPI 3.0-friendly types", () => {
     const root = providerSchemaRecord.properties as
       | Record<string, { properties?: Record<string, unknown> }>
       | undefined;
@@ -256,6 +258,8 @@ describe("createCronToolSchema", () => {
     expect(patchProps?.payload?.properties?.toolsAllow?.description).toMatch(/null to clear/i);
     expect(patchProps?.payload?.properties?.model?.type).toBe("string");
     expect(patchProps?.payload?.properties?.model?.description).toMatch(/null to clear/i);
+    expect(patchProps?.payload?.properties?.fallbacks?.type).toBe("array");
+    expect(patchProps?.payload?.properties?.fallbacks?.description).toMatch(/null to clear/i);
   });
 
   it("projects nullable cron fields for Gemini models behind OpenAI-compatible providers", () => {
@@ -266,6 +270,9 @@ describe("createCronToolSchema", () => {
       type: "string",
     });
     expect(propertyAt(jjccGeminiSchemaRecord, "patch.payload.toolsAllow")).toMatchObject({
+      type: "array",
+    });
+    expect(propertyAt(jjccGeminiSchemaRecord, "patch.payload.fallbacks")).toMatchObject({
       type: "array",
     });
     expect(propertyAt(jjccGeminiSchemaRecord, "patch.delivery.channel")).toMatchObject({

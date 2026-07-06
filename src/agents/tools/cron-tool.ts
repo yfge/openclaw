@@ -120,7 +120,11 @@ function cronPayloadObjectSchema(params: { model: TSchema; toolsAllow: TSchema }
       timeoutSeconds: optionalFiniteNumberSchema({ minimum: 0 }),
       lightContext: Type.Optional(Type.Boolean()),
       allowUnsafeExternalContent: Type.Optional(Type.Boolean()),
-      fallbacks: Type.Optional(Type.Array(Type.String(), { description: "Fallback models" })),
+      fallbacks: Type.Optional(
+        Type.Union([Type.Array(Type.String()), Type.Null()], {
+          description: "Fallback models, or null to clear",
+        }),
+      ),
       toolsAllow: params.toolsAllow,
     },
     { additionalProperties: true },
@@ -159,7 +163,7 @@ function createCronScheduleSchema(): TSchema {
 function createCronPayloadSchema(): TSchema {
   return Type.Optional(
     cronPayloadObjectSchema({
-      model: Type.Optional(Type.String({ description: "Model override" })),
+      model: nullableStringSchema("Model override, or null to clear"),
       toolsAllow: Type.Optional(Type.Array(Type.String(), { description: "Allowed tools" })),
     }),
   );
