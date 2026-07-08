@@ -1444,13 +1444,17 @@ export async function runHeartbeatOnce(opts: {
     mergeRequestedHeartbeat: opts.source === "cron",
   });
   const runScope = opts.runScope ?? "global";
-  if (!areHeartbeatsEnabled()) {
+  const isExplicitWakeRequest =
+    opts.intent === "immediate" ||
+    opts.intent === "manual" ||
+    (normalizeOptionalString(opts.sessionKey)?.length ?? 0) > 0;
+  if (!isExplicitWakeRequest && !areHeartbeatsEnabled()) {
     return { status: "skipped", reason: "disabled" };
   }
-  if (!isHeartbeatEnabledForAgent(cfg, agentId)) {
+  if (!isExplicitWakeRequest && !isHeartbeatEnabledForAgent(cfg, agentId)) {
     return { status: "skipped", reason: "disabled" };
   }
-  if (!resolveHeartbeatIntervalMs(cfg, undefined, heartbeat)) {
+  if (!isExplicitWakeRequest && !resolveHeartbeatIntervalMs(cfg, undefined, heartbeat)) {
     return { status: "skipped", reason: "disabled" };
   }
 

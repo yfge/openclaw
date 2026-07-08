@@ -737,6 +737,50 @@ describe("runHeartbeatOnce", () => {
     }
   });
 
+  it("runs explicit cron wakes for a targeted session even when heartbeat is not enabled", async () => {
+    const tmpDir = await createCaseDir("hb-cron-explicit-wake");
+    const storePath = path.join(tmpDir, "sessions.json");
+    const cfg: OpenClawConfig = {
+      agents: {
+        list: [{ id: "main" }],
+      },
+      session: { store: storePath },
+    };
+    const sessionKey = resolveMainSessionKey(cfg);
+    await fs.writeFile(
+      storePath,
+      JSON.stringify({
+        [sessionKey]: {
+          sessionId: "sid",
+          updatedAt: Date.now(),
+          lastChannel: "whatsapp",
+          lastTo: "120363401234567890@g.us",
+        },
+      }),
+    );
+    enqueueSystemEvent("Cron explicit wake", {
+      sessionKey,
+      contextKey: "cron:test-explicit-wake",
+    });
+
+    const res = await runHeartbeatOnce({
+      cfg,
+      source: "cron",
+      intent: "immediate",
+      reason: "cron:test-explicit-wake",
+      sessionKey,
+      heartbeat: { target: "none" },
+      deps: {
+        getQueueSize: () => 0,
+        nowMs: () => Date.now(),
+        webAuthExists: async () => true,
+        hasActiveWebListener: () => true,
+      },
+    });
+
+    expect(res.status).toBe("ran");
+  });
+
   it.each([
     ["the heartbeat main session", (cfg: OpenClawConfig) => resolveMainSessionKey(cfg)],
     ["another session for the same agent", () => "agent:main:telegram:alerts"],
