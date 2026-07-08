@@ -737,49 +737,62 @@ describe("runHeartbeatOnce", () => {
     }
   });
 
-  it("runs explicit cron wakes for a targeted session even when heartbeat is not enabled", async () => {
-    const tmpDir = await createCaseDir("hb-cron-explicit-wake");
-    const storePath = path.join(tmpDir, "sessions.json");
-    const cfg: OpenClawConfig = {
-      agents: {
-        list: [{ id: "main" }],
-      },
-      session: { store: storePath },
-    };
-    const sessionKey = resolveMainSessionKey(cfg);
-    await fs.writeFile(
-      storePath,
-      JSON.stringify({
-        [sessionKey]: {
-          sessionId: "sid",
-          updatedAt: Date.now(),
-          lastChannel: "whatsapp",
-          lastTo: "120363401234567890@g.us",
+  it.each([
+    { intent: "immediate" as const, label: "wakeMode=now" },
+    { intent: "event" as const, label: "wakeMode=next-heartbeat" },
+  ])(
+    "runs explicit cron wakes for a targeted session even when heartbeat is not enabled ($label)",
+    async ({ intent }) => {
+      const tmpDir = await createCaseDir("hb-cron-explicit-wake");
+      const storePath = path.join(tmpDir, "sessions.json");
+      const replySpy = vi.fn().mockResolvedValue({ text: "Handled cron wake" });
+      const sendWhatsApp = vi
+        .fn<
+          (
+            to: string,
+            text: string,
+            opts?: unknown,
+          ) => Promise<{ messageId: string; toJid: string }>
+        >()
+        .mockResolvedValue({ messageId: "m1", toJid: "jid" });
+      const cfg: OpenClawConfig = {
+        agents: {
+          list: [{ id: "main" }],
         },
-      }),
-    );
-    enqueueSystemEvent("Cron explicit wake", {
-      sessionKey,
-      contextKey: "cron:test-explicit-wake",
-    });
+        session: { store: storePath },
+      };
+      const sessionKey = resolveMainSessionKey(cfg);
+      await fs.writeFile(
+        storePath,
+        JSON.stringify({
+          [sessionKey]: {
+            sessionId: "sid",
+            updatedAt: Date.now(),
+            lastChannel: "whatsapp",
+            lastTo: "120363401234567890@g.us",
+          },
+        }),
+      );
+      enqueueSystemEvent("Cron explicit wake", {
+        sessionKey,
+        contextKey: "cron:test-explicit-wake",
+      });
 
-    const res = await runHeartbeatOnce({
-      cfg,
-      source: "cron",
-      intent: "immediate",
-      reason: "cron:test-explicit-wake",
-      sessionKey,
-      heartbeat: { target: "none" },
-      deps: {
-        getQueueSize: () => 0,
-        nowMs: () => Date.now(),
-        webAuthExists: async () => true,
-        hasActiveWebListener: () => true,
-      },
-    });
+      const res = await runHeartbeatOnce({
+        cfg,
+        source: "cron",
+        intent,
+        reason: "cron:test-explicit-wake",
+        sessionKey,
+        heartbeat: { target: "none" },
+        deps: createHeartbeatDeps(sendWhatsApp, { getReplyFromConfig: replySpy }),
+      });
 
-    expect(res.status).toBe("ran");
-  });
+      expect(res.status).toBe("ran");
+      expect(replySpy).toHaveBeenCalledTimes(1);
+      expect(sendWhatsApp).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ["the heartbeat main session", (cfg: OpenClawConfig) => resolveMainSessionKey(cfg)],

@@ -1444,10 +1444,12 @@ export async function runHeartbeatOnce(opts: {
     mergeRequestedHeartbeat: opts.source === "cron",
   });
   const runScope = opts.runScope ?? "global";
+  const normalizedReason = normalizeOptionalString(opts.reason);
   const isExplicitWakeRequest =
     opts.intent === "immediate" ||
     opts.intent === "manual" ||
-    (normalizeOptionalString(opts.sessionKey)?.length ?? 0) > 0;
+    opts.source === "cron" ||
+    normalizedReason?.startsWith("cron:") === true;
   if (!isExplicitWakeRequest && !areHeartbeatsEnabled()) {
     return { status: "skipped", reason: "disabled" };
   }
