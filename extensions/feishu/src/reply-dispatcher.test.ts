@@ -1466,6 +1466,35 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     });
   });
 
+  it("marks streaming final text visible before sending regular media", async () => {
+    const { result, options } = createDispatcherHarness({
+      runtime: createRuntimeLogger(),
+    });
+
+    await options.deliver(
+      { text: "daily report", mediaUrls: ["https://example.com/report.png"] },
+      { kind: "final" },
+    );
+
+    expect(streamingInstances).toHaveLength(1);
+    expect(streamingInstances[0].close).toHaveBeenCalledTimes(1);
+    expect(streamingInstances[0].close).toHaveBeenCalledWith("daily report", {
+      note: "Agent: agent",
+    });
+    expect(sendMediaFeishuMock).toHaveBeenCalledTimes(1);
+    expectMockArgFields(sendMediaFeishuMock, "media send params", {
+      mediaUrl: "https://example.com/report.png",
+    });
+    await expect(
+      result.ensureNoVisibleReplyFallback("dispatch-complete-no-visible-reply"),
+    ).resolves.toBe(false);
+    expect(sendMessageFeishuMock).not.toHaveBeenCalled();
+    expect(result.getVisibleReplyState()).toEqual({
+      visibleReplySent: true,
+      skippedFinalReason: null,
+    });
+  });
+
   it("passes replyInThread to sendMessageFeishu for plain text", async () => {
     useNonStreamingAutoAccount();
     const { options } = createDispatcherHarness({

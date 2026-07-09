@@ -782,6 +782,9 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
             }
             // Send media even when streaming handled the text
             if (hasMedia) {
+              if (info?.kind === "final") {
+                await closeStreaming();
+              }
               await sendMediaReplies(payload);
             }
             return;
