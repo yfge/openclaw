@@ -17,15 +17,17 @@ describe("xai api helpers", () => {
   });
 
   it("keeps default-route xAI transport for the declared provider", () => {
-    expect(
-      resolveXaiTransport({
-        provider: "xai",
-        api: "openai-completions",
-      }),
-    ).toEqual({
-      api: "openai-responses",
-      baseUrl: undefined,
-    });
+    for (const provider of ["xai", "x-ai"] as const) {
+      expect(
+        resolveXaiTransport({
+          provider,
+          api: "openai-completions",
+        }),
+      ).toEqual({
+        api: "openai-responses",
+        baseUrl: undefined,
+      });
+    }
   });
 
   it("detects xAI model hints", () => {

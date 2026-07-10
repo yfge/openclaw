@@ -1,5 +1,4 @@
 // Xai API module exposes the plugin public contract.
-import { normalizeProviderId } from "openclaw/plugin-sdk/provider-model-shared";
 import {
   normalizeOptionalLowercaseString,
   readStringValue,
@@ -10,6 +9,7 @@ import {
   normalizeNativeXaiModelId,
   XAI_TOOL_SCHEMA_PROFILE,
 } from "./model-compat.js";
+import { isXaiProviderId } from "./provider-id.js";
 
 export { buildXaiProvider } from "./provider-catalog.js";
 export { applyXaiConfig, applyXaiProviderConfig, XAI_DEFAULT_MODEL_REF } from "./onboard.js";
@@ -74,7 +74,7 @@ function shouldUseXaiResponsesTransport(params: {
   if (isXaiNativeEndpoint(params.baseUrl)) {
     return true;
   }
-  return normalizeProviderId(params.provider) === "xai" && !params.baseUrl;
+  return isXaiProviderId(params.provider) && !params.baseUrl;
 }
 
 export function resolveXaiTransport(params: {
