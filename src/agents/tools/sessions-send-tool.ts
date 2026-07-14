@@ -167,6 +167,31 @@ function isPendingErrorAgentWaitTimeout(result: AgentWaitResult): boolean {
   );
 }
 
+function isSelfTargetedSessionSend(params: {
+  cfg: OpenClawConfig;
+  alias: string;
+  mainKey: string;
+  requesterSessionKey?: string;
+  targetSessionKey: string;
+}): boolean {
+  const requesterSessionKey = normalizeOptionalString(params.requesterSessionKey);
+  if (!requesterSessionKey || requesterSessionKey !== params.targetSessionKey) {
+    return false;
+  }
+  if (
+    requesterSessionKey === "main" ||
+    requesterSessionKey === params.alias ||
+    requesterSessionKey === params.mainKey
+  ) {
+    return false;
+  }
+  return !isConfiguredAgentMainSessionKey({
+    cfg: params.cfg,
+    sessionKey: requesterSessionKey,
+    mainKey: params.mainKey,
+  });
+}
+
 async function startAgentRun(params: {
   callGateway: GatewayCaller;
   runId: string;
@@ -436,6 +461,23 @@ export function createSessionsSendTool(opts?: {
       // Normalize sessionKey/sessionId input into a canonical session key.
       const resolvedKey = visibleSession.key;
       const displayKey = visibleSession.displayKey;
+      if (
+        isSelfTargetedSessionSend({
+          cfg,
+          alias,
+          mainKey,
+          requesterSessionKey: effectiveRequesterKey,
+          targetSessionKey: resolvedKey,
+        })
+      ) {
+        return jsonResult({
+          runId: crypto.randomUUID(),
+          status: "error",
+          error:
+            "sessions_send cannot target the current active session. Return a normal assistant reply instead.",
+          sessionKey: displayKey,
+        });
+      }
       const timeoutMs = timeoutSeconds * 1000;
       const announceTimeoutMs = timeoutSeconds === 0 ? 30_000 : timeoutMs;
       const idempotencyKey = crypto.randomUUID();

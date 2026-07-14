@@ -202,6 +202,20 @@ function createMainSessionsSendTool() {
   });
 }
 
+function createExternalSessionsSendTool(sessionKey = "agent:main:feishu:default:direct:u_test") {
+  return createSessionsSendTool({
+    agentSessionKey: sessionKey,
+    agentChannel: "feishu",
+    config: {
+      session: { scope: "per-sender", mainKey: "main" },
+      tools: {
+        agentToAgent: { enabled: false },
+        sessions: { visibility: "all" },
+      },
+    },
+  });
+}
+
 function getFirstListedSession(result: SessionsListResult) {
   const details = result.details as
     | { sessions?: Array<{ key?: string; transcriptPath?: string }> }
@@ -880,6 +894,46 @@ describe("sessions_send gating", () => {
     expect(details.sessionKey).toBe(threadSessionKey);
     expect((result.details as { error?: string } | undefined)?.error ?? "").toContain(
       "cannot target a thread session",
+    );
+    expect(callGatewayMock).toHaveBeenCalledTimes(1);
+    expect(requireGatewayRequest().method).toBe("sessions.resolve");
+  });
+
+  it("rejects sends that target the current active session directly", async () => {
+    const externalSessionKey = "agent:main:feishu:default:direct:u_self";
+    const tool = createExternalSessionsSendTool(externalSessionKey);
+
+    const result = await tool.execute("call-self-target", {
+      sessionKey: externalSessionKey,
+      message: "hello myself",
+      timeoutSeconds: 5,
+    });
+
+    const details = requireDetails(result);
+    expect(details.status).toBe("error");
+    expect(details.sessionKey).toBe(externalSessionKey);
+    expect((result.details as { error?: string } | undefined)?.error ?? "").toContain(
+      "cannot target the current active session",
+    );
+    expect(callGatewayMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects sends when label resolution points back to the current active session", async () => {
+    const externalSessionKey = "agent:main:feishu:default:direct:u_self_label";
+    callGatewayMock.mockResolvedValueOnce({ key: externalSessionKey });
+    const tool = createExternalSessionsSendTool(externalSessionKey);
+
+    const result = await tool.execute("call-self-label", {
+      label: "myself",
+      message: "hello again",
+      timeoutSeconds: 5,
+    });
+
+    const details = requireDetails(result);
+    expect(details.status).toBe("error");
+    expect(details.sessionKey).toBe(externalSessionKey);
+    expect((result.details as { error?: string } | undefined)?.error ?? "").toContain(
+      "cannot target the current active session",
     );
     expect(callGatewayMock).toHaveBeenCalledTimes(1);
     expect(requireGatewayRequest().method).toBe("sessions.resolve");
