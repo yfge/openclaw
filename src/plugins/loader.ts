@@ -910,7 +910,29 @@ function getReusableCachedPluginRegistry(params: {
     gatewayBindableContext.onlyPluginIds,
   );
   if (!gatewayBindable) {
-    return undefined;
+    if (params.options.preferBuiltPluginArtifacts === true) {
+      return undefined;
+    }
+    const gatewayBindableBuiltArtifactContext = resolvePluginLoadCacheContext({
+      ...params.options,
+      runtimeOptions: {
+        ...params.options.runtimeOptions,
+        allowGatewaySubagentBinding: true,
+      },
+      preferBuiltPluginArtifacts: true,
+    });
+    const gatewayBindableBuiltArtifact = getCachedPluginRegistry(
+      gatewayBindableBuiltArtifactContext.cacheKey,
+      gatewayBindableBuiltArtifactContext.onlyPluginIds,
+    );
+    if (!gatewayBindableBuiltArtifact) {
+      return undefined;
+    }
+    return {
+      state: gatewayBindableBuiltArtifact,
+      cacheKey: gatewayBindableBuiltArtifactContext.cacheKey,
+      runtimeSubagentMode: gatewayBindableBuiltArtifactContext.runtimeSubagentMode,
+    };
   }
   return {
     state: gatewayBindable,

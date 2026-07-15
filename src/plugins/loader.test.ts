@@ -4298,6 +4298,80 @@ module.exports = { id: "throws-after-import", register() {} };`,
     delete (globalThis as Record<string, unknown>)[marker];
   });
 
+  it("reuses bundled built-artifact gateway registries for later default-mode loads", () => {
+    const repoRoot = makeTempDir();
+    const sourceDir = path.join(repoRoot, "extensions", "built-gateway-bundled");
+    const runtimeDir = path.join(repoRoot, "dist-runtime", "extensions", "built-gateway-bundled");
+    mkdirSafe(sourceDir);
+    mkdirSafe(runtimeDir);
+    fs.writeFileSync(
+      path.join(sourceDir, "openclaw.plugin.json"),
+      JSON.stringify(
+        {
+          id: "built-gateway-bundled",
+          configSchema: EMPTY_PLUGIN_SCHEMA,
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(sourceDir, "index.ts"),
+      `globalThis.openclawBundledSourceRegisterCount =
+        (globalThis.openclawBundledSourceRegisterCount || 0) + 1;
+export default { id: "built-gateway-bundled", register() {} };
+`,
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(runtimeDir, "index.js"),
+      `globalThis.openclawBundledBuiltRegisterCount =
+        (globalThis.openclawBundledBuiltRegisterCount || 0) + 1;
+module.exports = { id: "built-gateway-bundled", register() {} };
+`,
+      "utf-8",
+    );
+
+    const options = {
+      config: {
+        plugins: {
+          allow: ["built-gateway-bundled"],
+          entries: {
+            "built-gateway-bundled": { enabled: true },
+          },
+        },
+      },
+    };
+
+    withEnv(
+      {
+        OPENCLAW_BUNDLED_PLUGINS_DIR: path.join(repoRoot, "extensions"),
+        OPENCLAW_TEST_TRUST_BUNDLED_PLUGINS_DIR: "1",
+        OPENCLAW_DISABLE_BUNDLED_PLUGINS: undefined,
+      },
+      () => {
+        const gatewayBindable = loadOpenClawPlugins({
+          ...options,
+          runtimeOptions: {
+            allowGatewaySubagentBinding: true,
+          },
+          preferBuiltPluginArtifacts: true,
+        });
+        const defaultMode = loadOpenClawPlugins(options);
+
+        expect(defaultMode).toBe(gatewayBindable);
+        expect((globalThis as Record<string, unknown>).openclawBundledBuiltRegisterCount).toBe(1);
+        expect((globalThis as Record<string, unknown>).openclawBundledSourceRegisterCount).toBe(
+          undefined,
+        );
+      },
+    );
+
+    delete (globalThis as Record<string, unknown>).openclawBundledBuiltRegisterCount;
+    delete (globalThis as Record<string, unknown>).openclawBundledSourceRegisterCount;
+  });
+
   it("re-initializes global hook runner when serving registry from cache", () => {
     useNoBundledPlugins();
     const plugin = writePlugin({
