@@ -1774,6 +1774,42 @@ describe("handleFeishuMessage command authorization", () => {
     const message = mockCallArg<{ to?: string }>(mockSendMessageFeishu, 0, 0);
     expect(message.to).toBe("chat:oc_dm_chat_1");
   });
+
+  it("routes ordinary DM reply dispatch through the inbound chat_id", async () => {
+    const cfg: ClawdbotConfig = {
+      channels: {
+        feishu: {
+          dmPolicy: "open",
+          allowFrom: ["ou_sender_1"],
+        },
+      },
+    } as ClawdbotConfig;
+
+    const event: FeishuMessageEvent = {
+      sender: {
+        sender_id: {
+          open_id: "ou_sender_1",
+        },
+      },
+      message: {
+        message_id: "msg-dm-reply-chat-id",
+        chat_id: "oc_dm_chat_2",
+        chat_type: "p2p",
+        message_type: "text",
+        content: JSON.stringify({ text: "hello" }),
+      },
+    };
+
+    await dispatchMessage({ cfg, event });
+
+    expect(mockCreateFeishuReplyDispatcher).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatId: "oc_dm_chat_2",
+        sendTarget: "chat:oc_dm_chat_2",
+      }),
+    );
+  });
+
   it("creates pairing request and drops unauthorized DMs in pairing mode", async () => {
     mockShouldComputeCommandAuthorized.mockReturnValue(false);
     mockReadAllowFromStore.mockResolvedValue([]);

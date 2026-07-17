@@ -660,6 +660,9 @@ export async function handleFeishuMessage(params: {
     // Using a group-scoped From causes the agent to treat different users as the same person.
     const feishuFrom = `feishu:${ctx.senderOpenId}`;
     const feishuTo = isGroup ? `chat:${ctx.chatId}` : `user:${ctx.senderOpenId}`;
+    // Keep durable last-route targeting user-scoped for proactive sends, but
+    // route visible replies back through the inbound DM conversation itself.
+    const feishuReplyTarget = `chat:${ctx.chatId}`;
     const peerId = isGroup ? (groupSession?.peerId ?? ctx.chatId) : ctx.senderOpenId;
     const parentPeer = isGroup ? (groupSession?.parentPeer ?? null) : null;
     const directThreadReply = !isGroup && Boolean(ctx.threadId?.trim());
@@ -1424,7 +1427,7 @@ export async function handleFeishuMessage(params: {
               agentId,
               runtime: runtime as RuntimeEnv,
               chatId: ctx.chatId,
-              sendTarget: feishuTo,
+              sendTarget: feishuReplyTarget,
               allowReasoningPreview,
               replyToMessageId: replyTargetMessageId,
               typingTargetMessageId,
@@ -1607,7 +1610,7 @@ export async function handleFeishuMessage(params: {
           agentId: route.agentId,
           runtime: runtime as RuntimeEnv,
           chatId: ctx.chatId,
-          sendTarget: feishuTo,
+          sendTarget: feishuReplyTarget,
           allowReasoningPreview,
           replyToMessageId: replyTargetMessageId,
           typingTargetMessageId,
