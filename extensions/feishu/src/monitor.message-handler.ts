@@ -20,6 +20,7 @@ type FeishuMessageReceiveHandlerContext = {
   runtime?: RuntimeEnv;
   chatHistories: Map<string, HistoryEntry[]>;
   fireAndForget?: boolean;
+  abortSignal?: AbortSignal;
   handleMessage: (params: {
     cfg: ClawdbotConfig;
     event: FeishuMessageEvent;
@@ -32,6 +33,7 @@ type FeishuMessageReceiveHandlerContext = {
     processingClaim?: FeishuMessageProcessingClaim;
     messageDedupeKey?: string;
     turnAdoptionLifecycle?: FeishuIngressLifecycle;
+    abortSignal?: AbortSignal;
   }) => Promise<void>;
   resolveDebounceText: (params: {
     event: FeishuMessageEvent;
@@ -173,6 +175,7 @@ export function createFeishuMessageReceiveHandler({
   runtime,
   chatHistories,
   fireAndForget,
+  abortSignal,
   handleMessage,
   resolveDebounceText: resolveText,
   hasProcessedMessage,
@@ -228,6 +231,7 @@ export function createFeishuMessageReceiveHandler({
         processingClaim,
         messageDedupeKey,
         turnAdoptionLifecycle,
+        abortSignal,
       });
     };
     await enqueue(sequentialKey, task);

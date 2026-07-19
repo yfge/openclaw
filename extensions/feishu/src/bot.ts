@@ -33,6 +33,7 @@ import { resolveStorePath } from "openclaw/plugin-sdk/session-store-runtime";
 import { normalizeOptionalString, uniqueStrings } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import { resolveFeishuRuntimeAccount } from "./accounts.js";
+import { waitForAbortableDelay } from "./async.js";
 import { buildFeishuAgentBody } from "./bot-agent-body.js";
 import {
   buildBroadcastSessionKey,
@@ -100,6 +101,54 @@ import {
 // Key: appId or "default", Value: timestamp of last notification
 const permissionErrorNotifiedAt = new Map<string, number>();
 const PERMISSION_ERROR_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+const FEISHU_SESSION_INIT_CONFLICT_RETRY_DELAYS_MS = [250, 500, 1_000, 2_000] as const;
+
+function isReplySessionInitializationConflictError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes("reply session initialization conflicted");
+}
+
+export async function runFeishuDispatchWithSessionInitRetry<T>(params: {
+  accountId: string;
+  log: (message: string) => void;
+  abortSignal?: AbortSignal;
+  run: () => Promise<T>;
+}): Promise<{ status: "resolved"; value: T } | { status: "aborted" }> {
+  if (params.abortSignal?.aborted) {
+    return { status: "aborted" };
+  }
+
+  let retryIndex = 0;
+  while (true) {
+    try {
+      return {
+        status: "resolved",
+        value: await params.run(),
+      };
+    } catch (err) {
+      if (!isReplySessionInitializationConflictError(err)) {
+        throw err;
+      }
+
+      const delayMs = FEISHU_SESSION_INIT_CONFLICT_RETRY_DELAYS_MS[retryIndex];
+      if (delayMs === undefined) {
+        throw err;
+      }
+
+      retryIndex += 1;
+      params.log(
+        `feishu[${params.accountId}]: reply session initialization conflicted; retry ${retryIndex}/${FEISHU_SESSION_INIT_CONFLICT_RETRY_DELAYS_MS.length} in ${delayMs}ms`,
+      );
+      const shouldRetry = await waitForAbortableDelay(delayMs, params.abortSignal);
+      if (!shouldRetry) {
+        params.log(
+          `feishu[${params.accountId}]: abort signal received during reply session conflict backoff; stopping retries`,
+        );
+        return { status: "aborted" };
+      }
+    }
+  }
+}
 
 function shouldSendNoVisibleReplyFallback(dispatchResult: {
   counts: { final?: number };
@@ -295,6 +344,7 @@ export async function handleFeishuMessage(params: {
   processingClaim?: FeishuMessageProcessingClaim;
   messageDedupeKey?: string;
   turnAdoptionLifecycle?: FeishuIngressLifecycle;
+  abortSignal?: AbortSignal;
 }): Promise<void> {
   const {
     cfg,
@@ -308,7 +358,9 @@ export async function handleFeishuMessage(params: {
     processingClaim,
     messageDedupeKey: messageDedupeKeyOverride,
     turnAdoptionLifecycle,
+    abortSignal,
   } = params;
+  const dispatchAbortSignal = turnAdoptionLifecycle?.abortSignal ?? abortSignal;
 
   // Resolve account with merged config
   const account = resolveFeishuRuntimeAccount({ cfg, accountId });
@@ -1654,35 +1706,45 @@ export async function handleFeishuMessage(params: {
             log(
               `feishu[${account.accountId}]: broadcast active dispatch agent=${agentId} (session=${agentSessionKey})`,
             );
-            const turnResult = await core.channel.inbound.run({
-              channel: "feishu",
-              accountId: route.accountId,
-              raw: ctx,
-              adapter: {
-                ingest: () => ({
-                  id: ctx.messageId,
-                  timestamp: messageCreateTimeMs,
-                  rawText: ctx.content,
-                  textForAgent: agentCtx.BodyForAgent,
-                  textForCommands: agentCtx.CommandBody,
-                  raw: ctx,
-                }),
-                resolveTurn: () => ({
-                  cfg,
+            const dispatchAttempt = await runFeishuDispatchWithSessionInitRetry({
+              accountId: account.accountId,
+              log,
+              abortSignal: lane.lifecycle.abortSignal,
+              run: () =>
+                core.channel.inbound.run({
                   channel: "feishu",
                   accountId: route.accountId,
-                  route: { agentId, sessionKey: agentSessionKey },
-                  ctxPayload: agentCtx,
-                  record: agentRecord,
-                  dispatcherOptions,
-                  delivery,
-                  replyOptions: {
-                    ...replyOptions,
-                    ...bindIngressLifecycleToReplyOptions(lane.lifecycle),
+                  raw: ctx,
+                  adapter: {
+                    ingest: () => ({
+                      id: ctx.messageId,
+                      timestamp: messageCreateTimeMs,
+                      rawText: ctx.content,
+                      textForAgent: agentCtx.BodyForAgent,
+                      textForCommands: agentCtx.CommandBody,
+                      raw: ctx,
+                    }),
+                    resolveTurn: () => ({
+                      cfg,
+                      channel: "feishu",
+                      accountId: route.accountId,
+                      route: { agentId, sessionKey: agentSessionKey },
+                      ctxPayload: agentCtx,
+                      record: agentRecord,
+                      dispatcherOptions,
+                      delivery,
+                      replyOptions: {
+                        ...replyOptions,
+                        ...bindIngressLifecycleToReplyOptions(lane.lifecycle),
+                      },
+                    }),
                   },
                 }),
-              },
             });
+            if (dispatchAttempt.status === "aborted") {
+              return;
+            }
+            const turnResult = dispatchAttempt.value;
             if (
               turnResult.dispatched &&
               shouldSendNoVisibleReplyFallback(turnResult.dispatchResult)
@@ -1821,53 +1883,63 @@ export async function handleFeishuMessage(params: {
         });
 
       log(`feishu[${account.accountId}]: dispatching to agent (session=${route.sessionKey})`);
-      const turnResult = await core.channel.inbound.run({
-        channel: "feishu",
-        accountId: route.accountId,
-        raw: ctx,
-        adapter: {
-          ingest: () => ({
-            id: ctx.messageId,
-            timestamp: messageCreateTimeMs,
-            rawText: ctx.content,
-            textForAgent: ctxPayload.BodyForAgent,
-            textForCommands: ctxPayload.CommandBody,
-            raw: ctx,
-          }),
-          resolveTurn: () => ({
-            cfg: effectiveCfg,
+      const dispatchAttempt = await runFeishuDispatchWithSessionInitRetry({
+        accountId: account.accountId,
+        log,
+        abortSignal: dispatchAbortSignal,
+        run: () =>
+          core.channel.inbound.run({
             channel: "feishu",
             accountId: route.accountId,
-            route: { agentId: route.agentId, sessionKey: route.sessionKey },
-            ctxPayload,
-            record: {
-              updateLastRoute: buildFeishuInboundLastRouteUpdate({
-                sessionKey: route.sessionKey,
-                accountId: route.accountId,
+            raw: ctx,
+            adapter: {
+              ingest: () => ({
+                id: ctx.messageId,
+                timestamp: messageCreateTimeMs,
+                rawText: ctx.content,
+                textForAgent: ctxPayload.BodyForAgent,
+                textForCommands: ctxPayload.CommandBody,
+                raw: ctx,
               }),
-              onRecordError: (err) => {
-                log(
-                  `feishu[${account.accountId}]: failed to record inbound session ${route.sessionKey}: ${String(err)}`,
-                );
-              },
-            },
-            history: {
-              isGroup,
-              historyKey,
-              historyMap: chatHistories,
-              limit: historyLimit,
-            },
-            dispatcherOptions,
-            delivery,
-            replyOptions: {
-              ...replyOptions,
-              ...(turnAdoptionLifecycle
-                ? bindIngressLifecycleToReplyOptions(turnAdoptionLifecycle)
-                : {}),
+              resolveTurn: () => ({
+                cfg: effectiveCfg,
+                channel: "feishu",
+                accountId: route.accountId,
+                route: { agentId: route.agentId, sessionKey: route.sessionKey },
+                ctxPayload,
+                record: {
+                  updateLastRoute: buildFeishuInboundLastRouteUpdate({
+                    sessionKey: route.sessionKey,
+                    accountId: route.accountId,
+                  }),
+                  onRecordError: (err) => {
+                    log(
+                      `feishu[${account.accountId}]: failed to record inbound session ${route.sessionKey}: ${String(err)}`,
+                    );
+                  },
+                },
+                history: {
+                  isGroup,
+                  historyKey,
+                  historyMap: chatHistories,
+                  limit: historyLimit,
+                },
+                dispatcherOptions,
+                delivery,
+                replyOptions: {
+                  ...replyOptions,
+                  ...(turnAdoptionLifecycle
+                    ? bindIngressLifecycleToReplyOptions(turnAdoptionLifecycle)
+                    : {}),
+                },
+              }),
             },
           }),
-        },
       });
+      if (dispatchAttempt.status === "aborted") {
+        return;
+      }
+      const turnResult = dispatchAttempt.value;
       if (!turnResult.dispatched) {
         return;
       }

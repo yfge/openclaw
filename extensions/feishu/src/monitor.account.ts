@@ -306,6 +306,7 @@ function registerEventHandlers(
       runtime,
       chatHistories,
       fireAndForget,
+      abortSignal,
       handleMessage: handleFeishuMessage,
       resolveDebounceText: ({ event, botOpenId, botName }) =>
         parseFeishuMessageEvent(event, botOpenId, botName).content,
@@ -385,6 +386,7 @@ function registerEventHandlers(
             channelRuntime,
             chatHistories,
             accountId,
+            abortSignal,
           });
           await promise;
         },
@@ -416,6 +418,7 @@ function registerEventHandlers(
             channelRuntime,
             chatHistories,
             accountId,
+            abortSignal,
           });
           await promise;
         },

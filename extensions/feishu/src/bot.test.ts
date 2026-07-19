@@ -11,7 +11,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClawdbotConfig, PluginRuntime } from "../runtime-api.js";
 import { parseMergeForwardContent } from "./bot-content.js";
 import type { FeishuMessageEvent } from "./bot.js";
-import { handleFeishuMessage } from "./bot.js";
+import { handleFeishuMessage, runFeishuDispatchWithSessionInitRetry } from "./bot.js";
 import { resolveFeishuMessageDedupeKey } from "./dedupe-key.js";
 import { createFeishuMessageReceiveHandler } from "./monitor.message-handler.js";
 import { setFeishuRuntime } from "./runtime.js";
@@ -514,6 +514,116 @@ async function dispatchMessage(params: {
   });
   return runtime;
 }
+
+describe("runFeishuDispatchWithSessionInitRetry", () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("returns the dispatch result on the first attempt when it succeeds", async () => {
+    const run = vi.fn(async () => "ok");
+    const log = vi.fn();
+
+    const result = await runFeishuDispatchWithSessionInitRetry({
+      accountId: "default",
+      log,
+      run,
+    });
+
+    expect(result).toEqual({ status: "resolved", value: "ok" });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("rethrows non-conflict errors immediately", async () => {
+    const run = vi.fn(async () => {
+      throw new Error("network offline");
+    });
+
+    await expect(
+      runFeishuDispatchWithSessionInitRetry({
+        accountId: "default",
+        log: vi.fn(),
+        run,
+      }),
+    ).rejects.toThrow("network offline");
+
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries with backoff when dispatch hits a session-init conflict and then succeeds", async () => {
+    vi.useFakeTimers();
+    const log = vi.fn();
+    const run = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(new Error("reply session initialization conflicted for agent:main"))
+      .mockResolvedValueOnce("recovered");
+
+    const resultPromise = runFeishuDispatchWithSessionInitRetry({
+      accountId: "default",
+      log,
+      run,
+    });
+
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(resultPromise).resolves.toEqual({ status: "resolved", value: "recovered" });
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledWith(
+      "feishu[default]: reply session initialization conflicted; retry 1/4 in 250ms",
+    );
+  });
+
+  it("exhausts all retries and throws the last conflict error", async () => {
+    vi.useFakeTimers();
+    const run = vi.fn<() => Promise<never>>(async () => {
+      throw new Error("reply session initialization conflicted for agent:main");
+    });
+
+    const resultPromise = runFeishuDispatchWithSessionInitRetry({
+      accountId: "default",
+      log: vi.fn(),
+      run,
+    });
+    const rejection = expect(resultPromise).rejects.toThrow(
+      "reply session initialization conflicted for agent:main",
+    );
+
+    await vi.advanceTimersByTimeAsync(250 + 500 + 1_000 + 2_000);
+    await rejection;
+    expect(run).toHaveBeenCalledTimes(5);
+  });
+
+  it("stops retries when the abort signal fires during backoff", async () => {
+    vi.useFakeTimers();
+    const abortController = new AbortController();
+    const log = vi.fn();
+    const run = vi.fn<() => Promise<never>>(async () => {
+      throw new Error("reply session initialization conflicted for agent:main");
+    });
+
+    const resultPromise = runFeishuDispatchWithSessionInitRetry({
+      accountId: "default",
+      log,
+      abortSignal: abortController.signal,
+      run,
+    });
+    const resolution = expect(resultPromise).resolves.toEqual({ status: "aborted" });
+
+    abortController.abort();
+    await vi.runAllTimersAsync();
+
+    await resolution;
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenNthCalledWith(
+      1,
+      "feishu[default]: reply session initialization conflicted; retry 1/4 in 250ms",
+    );
+    expect(log).toHaveBeenNthCalledWith(
+      2,
+      "feishu[default]: abort signal received during reply session conflict backoff; stopping retries",
+    );
+  });
+});
 
 describe("handleFeishuMessage ACP routing", () => {
   beforeEach(() => {
