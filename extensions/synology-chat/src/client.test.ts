@@ -71,9 +71,12 @@ function createMockResponseEmitter(statusCode: number): MockResponse {
   return res as unknown as MockResponse;
 }
 
-function createMockRequestEmitter(): ClientRequest {
+function createMockRequestEmitter(onWrite?: (body: string) => void): ClientRequest {
   const req = new EventEmitter() as Partial<ClientRequest>;
-  req.write = vi.fn() as ClientRequest["write"];
+  req.write = vi.fn((body: string) => {
+    onWrite?.(body);
+    return true;
+  }) as ClientRequest["write"];
   req.end = vi.fn() as ClientRequest["end"];
   req.destroy = vi.fn() as ClientRequest["destroy"];
   return req as unknown as ClientRequest;
@@ -85,7 +88,7 @@ async function settleTimers<T>(promise: Promise<T>): Promise<T> {
   return promise;
 }
 
-function mockResponse(statusCode: number, body: string) {
+function mockResponse(statusCode: number, body: string, onWrite?: (body: string) => void) {
   const httpsRequest = vi.mocked(https.request);
   httpsRequest.mockImplementation(((...args) => {
     const callback = args[2];
@@ -94,7 +97,7 @@ function mockResponse(statusCode: number, body: string) {
       callback?.(res);
       res.end(body);
     });
-    return createMockRequestEmitter();
+    return createMockRequestEmitter(onWrite);
   }) as MockRequestHandler);
 }
 
@@ -151,6 +154,22 @@ describe("Synology Chat TLS verification defaults", () => {
 });
 
 describe("sendMessage", () => {
+  it("splits long replies before sending them to Synology Chat", async () => {
+    const text = `${"a".repeat(2000)}\n${"b".repeat(100)}`;
+    const requestBodies: string[] = [];
+    mockResponse(200, '{"success":true}', (body) => requestBodies.push(body));
+
+    const result = await settleTimers(sendMessage("https://nas.example.com/incoming", text, 42));
+
+    expect(result).toBe(true);
+    expect(requestBodies).toHaveLength(2);
+    const payloads = requestBodies.map((body) =>
+      JSON.parse(new URLSearchParams(body).get("payload")!),
+    );
+    expect(payloads.map((payload) => payload.text)).toEqual(["a".repeat(2000), "b".repeat(100)]);
+    expect(payloads.every((payload) => payload.user_ids?.[0] === 42)).toBe(true);
+  });
+
   installFakeTimerHarness();
 
   it("returns true on successful send", async () => {

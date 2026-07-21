@@ -14,9 +14,11 @@ import {
   resolvePinnedHostnameWithPolicy,
 } from "openclaw/plugin-sdk/ssrf-runtime";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { chunkTextForOutbound } from "openclaw/plugin-sdk/text-chunking";
 import { z } from "zod";
 
 const MIN_SEND_INTERVAL_MS = 500;
+export const SYNOLOGY_CHAT_TEXT_CHUNK_LIMIT = 2000;
 /** user_list JSON can be larger than inbound webhook pre-auth payloads. */
 const USER_LIST_RESPONSE_MAX_BYTES = 1 * 1024 * 1024;
 /** Wall-clock budget for user_list fetch including response body. */
@@ -99,8 +101,22 @@ export async function sendMessage(
   userId?: string | number,
   allowInsecureSsl = false,
 ): Promise<boolean> {
-  // Synology Chat API requires user_ids (numeric) to specify the recipient
-  // The @mention is optional but user_ids is mandatory
+  const chunks = chunkTextForOutbound(text, SYNOLOGY_CHAT_TEXT_CHUNK_LIMIT);
+  for (const chunk of chunks) {
+    if (!(await sendMessageChunk(incomingUrl, chunk, userId, allowInsecureSsl))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function sendMessageChunk(
+  incomingUrl: string,
+  text: string,
+  userId?: string | number,
+  allowInsecureSsl = false,
+): Promise<boolean> {
+  // Synology Chat API requires user_ids (numeric) to specify the recipient.
   const body = buildWebhookBody({ text }, userId);
 
   // Retry with exponential backoff (3 attempts, 300ms base)

@@ -34,7 +34,7 @@ import {
 import { sanitizeAssistantVisibleText } from "openclaw/plugin-sdk/text-chunking";
 import { listAccountIds, resolveAccount } from "./accounts.js";
 import { synologyChatApprovalAuth } from "./approval-auth.js";
-import { sendMessage, sendFileUrl } from "./client.js";
+import { sendMessage, sendFileUrl, SYNOLOGY_CHAT_TEXT_CHUNK_LIMIT } from "./client.js";
 import { SynologyChatChannelConfigSchema } from "./config-schema.js";
 import {
   collectSynologyGatewayRoutingWarnings,
@@ -449,7 +449,7 @@ function createSynologyChatPlugin(): SynologyChatPlugin {
     },
     outbound: {
       deliveryMode: "gateway" as const,
-      textChunkLimit: 2000,
+      textChunkLimit: SYNOLOGY_CHAT_TEXT_CHUNK_LIMIT,
       sanitizeText: ({ text }) => sanitizeAssistantVisibleText(text),
       sendText: sendSynologyChatText,
       sendMedia: async (ctx) => {
