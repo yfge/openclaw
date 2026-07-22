@@ -386,6 +386,41 @@ describe("feishuPlugin actions", () => {
     expect(details.chatId).toBe("oc_group_1");
   });
 
+  it("rejects unsupported file attachment params instead of sending text only", async () => {
+    await expect(
+      feishuPlugin.actions?.handleAction?.({
+        action: "send",
+        params: {
+          to: "chat:oc_group_1",
+          message: "report",
+          file: "/tmp/report.pdf",
+          filename: "report.pdf",
+        },
+        cfg,
+        accountId: undefined,
+        toolContext: {},
+      } as never),
+    ).rejects.toThrow('Feishu attachments must use the "media" parameter instead of "file".');
+
+    expect(sendMessageFeishuMock).not.toHaveBeenCalled();
+    expect(feishuOutboundSendMediaMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["", "   ", {}, []])("rejects invalid media values: %j", async (media) => {
+    await expect(
+      feishuPlugin.actions?.handleAction?.({
+        action: "send",
+        params: { to: "chat:oc_group_1", message: "report", media },
+        cfg,
+        accountId: undefined,
+        toolContext: {},
+      } as never),
+    ).rejects.toThrow("Feishu media must be a non-empty string.");
+
+    expect(sendMessageFeishuMock).not.toHaveBeenCalled();
+    expect(feishuOutboundSendMediaMock).not.toHaveBeenCalled();
+  });
+
   it("sends plain message card JSON as a native Feishu card", async () => {
     sendCardFeishuMock.mockResolvedValueOnce({ messageId: "om_card", chatId: "oc_group_1" });
 

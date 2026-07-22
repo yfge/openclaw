@@ -114,10 +114,23 @@ import type { FeishuConfig, FeishuProbeResult, ResolvedFeishuAccount } from "./t
 
 function readFeishuMediaParam(params: Record<string, unknown>): string | undefined {
   const media = params.media;
-  if (typeof media !== "string") {
+  if (media === undefined) {
     return undefined;
   }
-  return media.trim() ? media : undefined;
+  if (typeof media !== "string" || !media.trim()) {
+    throw new Error("Feishu media must be a non-empty string.");
+  }
+  return media;
+}
+
+function assertNoUnsupportedFeishuAttachmentParams(
+  params: Record<string, unknown>,
+  mediaUrl: string | undefined,
+): void {
+  if (mediaUrl || params.file === undefined) {
+    return;
+  }
+  throw new Error('Feishu attachments must use the "media" parameter instead of "file".');
 }
 
 function readBooleanParam(params: Record<string, unknown>, keys: string[]): boolean | undefined {
@@ -1085,6 +1098,7 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount, FeishuProbeResul
               normalizeMessagePresentation(ctx.params.presentation) ??
               (interactive ? legacyInteractiveReplyToPresentation(interactive) : undefined);
             const mediaUrl = readFeishuMediaParam(ctx.params);
+            assertNoUnsupportedFeishuAttachmentParams(ctx.params, mediaUrl);
             const audioAsVoice = readBooleanParam(ctx.params, ["asVoice", "audioAsVoice"]);
             if (textCard && !presentation) {
               assertFeishuCardWithinEnvelope(textCard, "Feishu native card");
