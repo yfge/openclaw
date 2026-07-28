@@ -73,6 +73,7 @@ type CronProps = {
   form: CronFormState;
   fieldErrors: CronFieldErrors;
   canSubmit: boolean;
+  canManage: boolean;
   editingJobId: string | null;
   createOpen: boolean;
   listTab: CronListTab;
@@ -418,7 +419,7 @@ function renderListView(props: CronProps) {
             )
           : [
               renderSettingsSection({}, renderJobsTable(props, hasAnyJobsFilters)),
-              hasAnyJobsFilters ? nothing : renderSuggestions(props),
+              hasAnyJobsFilters || !props.canManage ? nothing : renderSuggestions(props),
             ]}
       </div>
     `,
@@ -490,14 +491,18 @@ function renderToolbar(props: CronProps, hasAdvancedJobsFilters: boolean) {
         >
           ${icon("refresh")}
         </button>
-        <button
-          type="button"
-          class="btn primary btn--sm cron-new-task"
-          data-test-id="cron-new-task"
-          @click=${() => props.onOpenCreate()}
-        >
-          ${icon("plus")} ${t("cron.list.newTask")}
-        </button>
+        ${props.canManage
+          ? html`
+              <button
+                type="button"
+                class="btn primary btn--sm cron-new-task"
+                data-test-id="cron-new-task"
+                @click=${() => props.onOpenCreate()}
+              >
+                ${icon("plus")} ${t("cron.list.newTask")}
+              </button>
+            `
+          : nothing}
       </div>
     </div>
   `;
@@ -702,22 +707,26 @@ function renderJobRow(job: CronJob, props: CronProps) {
         @click=${(e: Event) => e.stopPropagation()}
         @keydown=${(e: Event) => e.stopPropagation()}
       >
-        <button
-          type="button"
-          class="btn btn--sm btn--ghost cron-row-run"
-          data-test-id=${`cron-row-run-${job.id}`}
-          title=${t("cron.actions.runNow")}
-          aria-label=${t("cron.actions.runNow")}
-          ?disabled=${props.busy}
-          @click=${() => props.onRun(job, "force")}
-        >
-          ${icon("play")}
-        </button>
-        ${renderEnabledSwitch(props, job, {
-          compact: true,
-          testId: `cron-row-toggle-${job.id}`,
-        })}
-        ${renderJobMenu(props, job)}
+        ${props.canManage
+          ? html`
+              <button
+                type="button"
+                class="btn btn--sm btn--ghost cron-row-run"
+                data-test-id=${`cron-row-run-${job.id}`}
+                title=${t("cron.actions.runNow")}
+                aria-label=${t("cron.actions.runNow")}
+                ?disabled=${props.busy}
+                @click=${() => props.onRun(job, "force")}
+              >
+                ${icon("play")}
+              </button>
+              ${renderEnabledSwitch(props, job, {
+                compact: true,
+                testId: `cron-row-toggle-${job.id}`,
+              })}
+              ${renderJobMenu(props, job)}
+            `
+          : nothing}
       </span>
     </div>
   `;
@@ -882,12 +891,14 @@ function renderDetailHeader(props: CronProps, mode: CronPanelMode, selectedJob?:
       <div class="cron-detail-header__copy">
         <div class="cron-detail-title">${title}</div>
         <div class="cron-detail-meta">
-          ${mode === "job" && selectedJob ? renderEnabledSwitch(props, selectedJob) : nothing}
+          ${mode === "job" && selectedJob && props.canManage
+            ? renderEnabledSwitch(props, selectedJob)
+            : nothing}
           <span class="cron-detail-sub">${subtitle}</span>
         </div>
       </div>
       <div class="cron-detail-actions">
-        ${mode === "job" && selectedJob
+        ${mode === "job" && selectedJob && props.canManage
           ? html`
               <button
                 type="button"
@@ -964,7 +975,11 @@ function renderEditor(props: CronProps, mode: CronPanelMode) {
         : t("cron.form.fixFieldsPlural", { count: String(blockingFields.length) })
       : "";
   return html`
-    <fieldset class="cron-editor" ?disabled=${props.busy} aria-busy=${String(props.busy)}>
+    <fieldset
+      class="cron-editor"
+      ?disabled=${props.busy || !props.canManage}
+      aria-busy=${String(props.busy)}
+    >
       ${renderPromptSection(props, { payloadLocked, isAgentTurn })} ${renderGeneralSection(props)}
       ${renderScheduleSection(props)}
       ${renderDeliverySection(props, { supportsAnnounce, selectedDeliveryMode })}
@@ -997,19 +1012,23 @@ function renderEditor(props: CronProps, mode: CronPanelMode) {
           `
         : nothing}
       <div class="cron-editor-actions">
-        <button
-          class="btn primary"
-          data-test-id="cron-submit"
-          ?disabled=${props.busy || !props.canSubmit}
-          @click=${props.onSubmit}
-        >
-          ${props.busy
-            ? t("cron.form.saving")
-            : mode === "job"
-              ? t("cron.form.saveChanges")
-              : t("cron.form.createTask")}
-        </button>
-        ${mode === "create"
+        ${props.canManage
+          ? html`
+              <button
+                class="btn primary"
+                data-test-id="cron-submit"
+                ?disabled=${props.busy || !props.canSubmit}
+                @click=${props.onSubmit}
+              >
+                ${props.busy
+                  ? t("cron.form.saving")
+                  : mode === "job"
+                    ? t("cron.form.saveChanges")
+                    : t("cron.form.createTask")}
+              </button>
+            `
+          : nothing}
+        ${mode === "create" && props.canManage
           ? html`
               <button
                 class="btn"

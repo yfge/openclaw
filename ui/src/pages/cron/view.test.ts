@@ -47,6 +47,7 @@ function createProps(overrides: Partial<CronProps> = {}): CronProps {
     form: { ...DEFAULT_CRON_FORM },
     fieldErrors: {},
     canSubmit: true,
+    canManage: true,
     editingJobId: null,
     createOpen: false,
     listTab: "tasks",
@@ -138,6 +139,42 @@ function findToggleByLabel(container: Element, label: string) {
 }
 
 describe("cron view list pane", () => {
+  it("keeps cron readable without exposing admin-only actions", () => {
+    const job = createJob("job-1");
+    const onSelectJob = vi.fn();
+    const container = renderView({
+      canManage: false,
+      jobs: [job],
+      jobsTotal: 1,
+      onSelectJob,
+    });
+
+    expect(container.querySelector('[data-test-id="cron-new-task"]')).toBeNull();
+    expect(container.querySelector('[data-test-id="cron-row-run-job-1"]')).toBeNull();
+    expect(container.querySelector('[data-test-id="cron-row-toggle-job-1"]')).toBeNull();
+    expect(container.querySelector(".cron-job-menu")).toBeNull();
+    expect(container.querySelector(".cron-suggestion")).toBeNull();
+
+    getElement(container, '[data-test-id="cron-row-job-1"]', HTMLElement).click();
+    expect(onSelectJob).toHaveBeenCalledWith(job);
+  });
+
+  it("renders selected cron settings read-only without mutation controls", () => {
+    const job = createJob("job-1");
+    const container = renderView({
+      canManage: false,
+      jobs: [job],
+      editingJobId: job.id,
+    });
+
+    expect(getElement(container, ".cron-editor", HTMLFieldSetElement).disabled).toBe(true);
+    expect(container.querySelector('[data-test-id="cron-run-now"]')).toBeNull();
+    expect(container.querySelector('[data-test-id="cron-toggle-enabled"]')).toBeNull();
+    expect(container.querySelector('[data-test-id="cron-submit"]')).toBeNull();
+    expect(container.querySelector(".cron-job-menu")).toBeNull();
+    expect(container.querySelector('[data-test-id="cron-detail-tab-history"]')).not.toBeNull();
+  });
+
   it("uses agent-scoped summary values", () => {
     const container = renderView({
       agentScoped: true,

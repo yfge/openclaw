@@ -158,6 +158,22 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("CronPage operator access", () => {
+  it("uses the connected operator scopes to render cron read-only", async () => {
+    const request = createRequest();
+    const gateway = createGateway({ request } as unknown as GatewayBrowserClient, true);
+    gateway.snapshot.hello = {
+      auth: { role: "operator", scopes: ["operator.read"] },
+    } as ApplicationGatewaySnapshot["hello"];
+    const page = createPage(createContext(gateway), { render: true });
+
+    await waitForCronPage(() => {
+      expect(request).toHaveBeenCalledWith("cron.list", expect.any(Object));
+      expect(page.querySelector('[data-test-id="cron-new-task"]')).toBeNull();
+    });
+  });
+});
+
 describe("CronPage editor state sync", () => {
   it.each([
     {

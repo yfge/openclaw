@@ -4,6 +4,7 @@ import { state } from "lit/decorators.js";
 import type { AgentsListResult, CronJob } from "../../api/types.ts";
 import { titleForRoute } from "../../app-navigation.ts";
 import { applicationContext, type ApplicationContext } from "../../app/context.ts";
+import { hasOperatorAdminAccess } from "../../app/operator-access.ts";
 import { renderAgentScopeControl } from "../../components/agent-scope-control.ts";
 import { renderSettingsWorkspace } from "../../components/settings-workspace.ts";
 import {
@@ -335,6 +336,7 @@ class CronPage extends OpenClawLightDomElement {
 
   override render() {
     const channels = this.context.channels.state;
+    const canManage = hasOperatorAdminAccess(this.context.gateway.snapshot.hello?.auth ?? null);
     const fallbackAgentId = resolveSessionNavigationAgentId(this.context);
     const suggestions = buildCronSuggestions({
       channels,
@@ -395,6 +397,7 @@ class CronPage extends OpenClawLightDomElement {
           runsSortDir: this.cron.cronRunsSortDir,
           fieldErrors: this.cron.cronFieldErrors,
           canSubmit: !hasCronFormErrors(this.cron.cronFieldErrors),
+          canManage,
           agentSuggestions: suggestions.agentSuggestions,
           modelSuggestions: suggestions.modelSuggestions,
           thinkingSuggestions: THINKING_SUGGESTIONS,
