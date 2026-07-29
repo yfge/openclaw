@@ -1,9 +1,33 @@
 // Feishu tests cover security audit plugin behavior.
 import { describe, expect, it } from "vitest";
 import type { OpenClawConfig } from "../runtime-api.js";
+import { feishuPlugin } from "./channel.js";
 import { collectFeishuSecurityAuditFindings } from "./security-audit.js";
 
 describe("Feishu security audit findings", () => {
+  it("exposes open DM policy to the shared security audit", () => {
+    const cfg = {
+      channels: {
+        feishu: {
+          dmPolicy: "open",
+          allowFrom: ["*"],
+        },
+      },
+    } satisfies OpenClawConfig;
+
+    expect(
+      feishuPlugin.security?.resolveDmPolicy?.({
+        cfg,
+        account: feishuPlugin.config.resolveAccount(cfg, undefined),
+      }),
+    ).toMatchObject({
+      policy: "open",
+      allowFrom: ["*"],
+      policyPath: "channels.feishu.dmPolicy",
+      allowFromPath: "channels.feishu.allowFrom",
+    });
+  });
+
   it.each([
     {
       name: "warns when doc tool is enabled because create can grant requester access",

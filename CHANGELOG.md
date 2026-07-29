@@ -51,6 +51,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- **Feishu/Teams DM security audit:** evaluate configured DM policies for Feishu and Microsoft Teams so `openclaw security audit` reports publicly open direct messages instead of silently skipping those plugins. Fixes #115410. Thanks @omarshahine.
 - **Shared state corruption recovery:** evict only the exact cached SQLite owner after proven read or write corruption so a repaired database recovers without a Gateway restart while caller-injected handles remain untouched. Fixes #114269. Thanks @rizquuula.
 - **Dev-channel updates:** finish package-to-git switches in a fresh CLI process even when source SHA and version metadata are unchanged, preventing stale hashed chunks from loading after the global package root changes.
 - **Parallels release smoke:** preserve Windows installer reboot results across Parallels, wait for WSL MSI/default-version readiness, force explicit test-owned gateway stops, and reset Linux package, config, and cache state before install lanes, preventing false prerequisite, safety-gate, and stale-config failures.

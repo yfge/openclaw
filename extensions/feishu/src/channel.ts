@@ -1767,6 +1767,13 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount, FeishuProbeResul
       message: feishuMessageAdapter,
     },
     security: {
+      dm: {
+        channelKey: "feishu",
+        resolvePolicy: (account) => account.config.dmPolicy,
+        resolveAllowFrom: (account) => account.config.allowFrom,
+        policyPathSuffix: "dmPolicy",
+        allowFromPathSuffix: "allowFrom",
+      },
       collectWarnings: projectConfigAccountIdWarningCollector<{
         cfg: ClawdbotConfig;
         accountId?: string | null;

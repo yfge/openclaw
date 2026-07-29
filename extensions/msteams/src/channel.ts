@@ -11,6 +11,7 @@ import {
 } from "openclaw/plugin-sdk/channel-outbound";
 import { createPairingPrefixStripper } from "openclaw/plugin-sdk/channel-pairing";
 import {
+  buildAccountScopedDmSecurityPolicy,
   createAllowlistProviderGroupPolicyWarningCollector,
   projectConfigWarningCollector,
 } from "openclaw/plugin-sdk/channel-policy";
@@ -1266,6 +1267,15 @@ export const msteamsPlugin: ChannelPlugin<ResolvedMSTeamsAccount, ProbeMSTeamsRe
       },
     },
     security: {
+      resolveDmPolicy: ({ cfg }) =>
+        buildAccountScopedDmSecurityPolicy({
+          cfg,
+          channelKey: "msteams",
+          policy: cfg.channels?.msteams?.dmPolicy,
+          allowFrom: cfg.channels?.msteams?.allowFrom,
+          policyPathSuffix: "dmPolicy",
+          allowFromPathSuffix: "allowFrom",
+        }),
       collectWarnings: projectConfigWarningCollector<{ cfg: OpenClawConfig }>(
         collectMSTeamsSecurityWarnings,
       ),
