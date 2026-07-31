@@ -276,18 +276,204 @@ const SKILL_CONTENT_RULES: SourceRule[] = [
 // Core scanner
 // ---------------------------------------------------------------------------
 
-function isBenignMemberExecMatch(line: string, match: RegExpExecArray): boolean {
-  const command = match[1];
-  if (command !== "exec") {
-    return false;
+const CHILD_PROCESS_EXEC_METHODS = new Set([
+  "exec",
+  "execFile",
+  "execFileSync",
+  "execSync",
+  "spawn",
+  "spawnSync",
+]);
+const CHILD_PROCESS_EXEC_METHOD_PATTERN = [...CHILD_PROCESS_EXEC_METHODS].join("|");
+const JAVASCRIPT_IDENTIFIER_PATTERN = "[A-Za-z_$][\\w$]*";
+const JAVASCRIPT_IDENTIFIER = new RegExp(`^${JAVASCRIPT_IDENTIFIER_PATTERN}$`, "u");
+
+type ChildProcessBindings = {
+  direct: Set<string>;
+  namespaces: Set<string>;
+};
+
+type ProvenanceAwareExecMatch = {
+  index: number;
+};
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function addNamedChildProcessBindings(params: {
+  bindings: Set<string>;
+  specifiers: string;
+  aliasSeparator: "as" | ":";
+}): void {
+  for (const rawSpecifier of params.specifiers.split(",")) {
+    const specifier = rawSpecifier.trim();
+    if (!specifier || specifier.startsWith("type ")) {
+      continue;
+    }
+    const separator = params.aliasSeparator === "as" ? /\s+as\s+/u : /\s*:\s*/u;
+    const [importedName, localName = importedName] = specifier
+      .split(separator, 2)
+      .map((part) => part.trim().split(/\s*=\s*/u, 1)[0] ?? "");
+    if (
+      importedName &&
+      localName &&
+      CHILD_PROCESS_EXEC_METHODS.has(importedName) &&
+      JAVASCRIPT_IDENTIFIER.test(localName)
+    ) {
+      params.bindings.add(localName);
+    }
+  }
+}
+
+function collectChildProcessBindings(source: string): ChildProcessBindings {
+  const bindings: ChildProcessBindings = {
+    direct: new Set<string>(),
+    namespaces: new Set<string>(),
+  };
+  const modulePattern = String.raw`["'](?:node:)?child_process["']`;
+
+  for (const match of source.matchAll(
+    new RegExp(
+      String.raw`(?:^|\n)\s*import\s+(?!type\b)(${JAVASCRIPT_IDENTIFIER_PATTERN})\s*,\s*\{([^}]*)\}\s*from\s*${modulePattern}`,
+      "gu",
+    ),
+  )) {
+    const namespace = match[1];
+    if (namespace) {
+      bindings.namespaces.add(namespace);
+    }
+    addNamedChildProcessBindings({
+      bindings: bindings.direct,
+      specifiers: match[2] ?? "",
+      aliasSeparator: "as",
+    });
+  }
+  for (const match of source.matchAll(
+    new RegExp(
+      String.raw`(?:^|\n)\s*import\s+(?!type\b)(${JAVASCRIPT_IDENTIFIER_PATTERN})\s*,\s*\*\s+as\s+(${JAVASCRIPT_IDENTIFIER_PATTERN})\s+from\s*${modulePattern}`,
+      "gu",
+    ),
+  )) {
+    for (const namespace of [match[1], match[2]]) {
+      if (namespace) {
+        bindings.namespaces.add(namespace);
+      }
+    }
+  }
+  for (const match of source.matchAll(
+    new RegExp(
+      String.raw`(?:^|\n)\s*import\s+(?!type\b)\{([^}]*)\}\s*from\s*${modulePattern}`,
+      "gu",
+    ),
+  )) {
+    addNamedChildProcessBindings({
+      bindings: bindings.direct,
+      specifiers: match[1] ?? "",
+      aliasSeparator: "as",
+    });
+  }
+  for (const match of source.matchAll(
+    new RegExp(
+      String.raw`(?:^|\n)\s*(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\s*\(\s*${modulePattern}\s*\)`,
+      "gu",
+    ),
+  )) {
+    addNamedChildProcessBindings({
+      bindings: bindings.direct,
+      specifiers: match[1] ?? "",
+      aliasSeparator: ":",
+    });
   }
 
-  const matchIndex = match.index;
-  if (matchIndex <= 0 || line[matchIndex - 1] !== ".") {
-    return false;
+  const namespacePatterns = [
+    new RegExp(
+      String.raw`(?:^|\n)\s*import\s+\*\s+as\s+(${JAVASCRIPT_IDENTIFIER_PATTERN})\s+from\s*${modulePattern}`,
+      "gu",
+    ),
+    new RegExp(
+      String.raw`(?:^|\n)\s*import\s+(?!type\b)(${JAVASCRIPT_IDENTIFIER_PATTERN})\s+from\s*${modulePattern}`,
+      "gu",
+    ),
+    new RegExp(
+      String.raw`(?:^|\n)\s*(?:const|let|var)\s+(${JAVASCRIPT_IDENTIFIER_PATTERN})\s*=\s*require\s*\(\s*${modulePattern}\s*\)`,
+      "gu",
+    ),
+  ];
+  for (const pattern of namespacePatterns) {
+    for (const match of source.matchAll(pattern)) {
+      const localName = match[1];
+      if (localName) {
+        bindings.namespaces.add(localName);
+      }
+    }
   }
+  return bindings;
+}
 
-  return !/\b(?:cp|childProcess|child_process)\s*\.\s*exec\s*\(/.test(line);
+function collectProvenanceAwareExecMatches(
+  source: string,
+): Map<number, ProvenanceAwareExecMatch[]> {
+  const bindings = collectChildProcessBindings(source);
+  const matchesByLine = new Map<number, ProvenanceAwareExecMatch[]>();
+  const addMatch = (lineIndex: number, index: number) => {
+    const matches = matchesByLine.get(lineIndex) ?? [];
+    matches.push({ index });
+    matchesByLine.set(lineIndex, matches);
+  };
+
+  for (const [lineIndex, line] of source.split("\n").entries()) {
+    const inlineRequirePatterns = [
+      new RegExp(
+        String.raw`(?:^|[^\w$.])require\s*\(\s*["'](?:node:)?child_process["']\s*\)\s*\.\s*(${CHILD_PROCESS_EXEC_METHOD_PATTERN})\s*\(`,
+        "gu",
+      ),
+      new RegExp(
+        String.raw`(?:^|[^\w$.])require\s*\(\s*["'](?:node:)?child_process["']\s*\)\s*\[\s*(["'])(${CHILD_PROCESS_EXEC_METHOD_PATTERN})\1\s*\]\s*\(`,
+        "gu",
+      ),
+    ];
+    for (const [patternIndex, pattern] of inlineRequirePatterns.entries()) {
+      for (const match of line.matchAll(pattern)) {
+        const methodName = match[patternIndex === 0 ? 1 : 2];
+        if (methodName) {
+          addMatch(lineIndex, match.index + match[0].lastIndexOf(methodName));
+        }
+      }
+    }
+
+    for (const localName of bindings.direct) {
+      const pattern = new RegExp(String.raw`(?:^|[^\w$.])(${escapeRegExp(localName)})\s*\(`, "gu");
+      for (const match of line.matchAll(pattern)) {
+        const matchedName = match[1];
+        if (matchedName) {
+          addMatch(lineIndex, match.index + match[0].indexOf(matchedName));
+        }
+      }
+    }
+    for (const namespace of bindings.namespaces) {
+      const escapedNamespace = escapeRegExp(namespace);
+      const memberPatterns = [
+        new RegExp(
+          String.raw`(?:^|[^\w$.])${escapedNamespace}\s*\.\s*(${CHILD_PROCESS_EXEC_METHOD_PATTERN})\s*\(`,
+          "gu",
+        ),
+        new RegExp(
+          String.raw`(?:^|[^\w$.])${escapedNamespace}\s*\[\s*(["'])(${CHILD_PROCESS_EXEC_METHOD_PATTERN})\1\s*\]\s*\(`,
+          "gu",
+        ),
+      ];
+      for (const [patternIndex, pattern] of memberPatterns.entries()) {
+        for (const match of line.matchAll(pattern)) {
+          const methodName = match[patternIndex === 0 ? 1 : 2];
+          if (methodName) {
+            addMatch(lineIndex, match.index + match[0].lastIndexOf(methodName));
+          }
+        }
+      }
+    }
+  }
+  return matchesByLine;
 }
 
 function stripCommentsForHeuristics(source: string): string {
@@ -303,11 +489,14 @@ function stripCommentsForHeuristics(source: string): string {
     if (inBlockComment) {
       if (ch === "*" && next === "/") {
         inBlockComment = false;
+        stripped += "  ";
         i++;
         continue;
       }
       if (ch === "\n") {
         stripped += "\n";
+      } else {
+        stripped += " ";
       }
       continue;
     }
@@ -332,6 +521,7 @@ function stripCommentsForHeuristics(source: string): string {
 
     if (ch === "/" && next === "/") {
       while (i < source.length && source[i] !== "\n") {
+        stripped += " ";
         i++;
       }
       if (source[i] === "\n") {
@@ -342,6 +532,7 @@ function stripCommentsForHeuristics(source: string): string {
 
     if (ch === "/" && next === "*") {
       inBlockComment = true;
+      stripped += "  ";
       i++;
       continue;
     }
@@ -393,6 +584,7 @@ export function scanSource(source: string, filePath: string): SkillScanFinding[]
   const lines = source.split("\n");
   const heuristicSource = stripCommentsForHeuristics(source);
   const heuristicLines = heuristicSource.split("\n");
+  const provenanceAwareExecMatches = collectProvenanceAwareExecMatches(heuristicSource);
 
   // --- Line rules ---
   for (const rule of LINE_RULES) {
@@ -405,19 +597,31 @@ export function scanSource(source: string, filePath: string): SkillScanFinding[]
     let omittedMatches = 0;
     let lastOmittedLine: number | undefined;
     for (const [i, line] of lines.entries()) {
-      const matches = line.matchAll(
-        new RegExp(
-          rule.pattern.source,
-          rule.pattern.flags.includes("g") ? rule.pattern.flags : `${rule.pattern.flags}g`,
-        ),
-      );
-      for (const match of matches) {
-        if (rule.ruleId === "dangerous-exec" && isBenignMemberExecMatch(line, match)) {
-          continue;
+      const matchesByIndex = new Map<number, RegExpExecArray | undefined>();
+      if (rule.ruleId !== "dangerous-exec") {
+        for (const match of line.matchAll(
+          new RegExp(
+            rule.pattern.source,
+            rule.pattern.flags.includes("g") ? rule.pattern.flags : `${rule.pattern.flags}g`,
+          ),
+        )) {
+          matchesByIndex.set(match.index, match);
         }
+      }
+      if (rule.ruleId === "dangerous-exec") {
+        for (const match of provenanceAwareExecMatches.get(i) ?? []) {
+          matchesByIndex.set(match.index, undefined);
+        }
+      }
 
+      for (const match of [...matchesByIndex.entries()]
+        .toSorted(([left], [right]) => left - right)
+        .map(([, candidate]) => candidate)) {
         // Special handling for suspicious-network: check port
         if (rule.ruleId === "suspicious-network") {
+          if (!match) {
+            continue;
+          }
           const port = Number.parseInt(expectDefined(match[1], "scanner regex capture 1"), 10);
           if (STANDARD_PORTS.has(port)) {
             continue;

@@ -163,6 +163,114 @@ spawn("node", ["second.js"]); execFile("node", ["third.js"]);
     expect(findings.map((finding) => finding.line)).toEqual([3, 4, 4]);
   });
 
+  it.each([
+    {
+      name: "ESM named import alias",
+      source: `
+import { spawn as launch } from "node:child_process";
+launch("node", ["server.js"]);
+`,
+      line: 3,
+    },
+    {
+      name: "CommonJS destructuring alias",
+      source: `
+const { exec: run } = require("child_process");
+run("node server.js");
+`,
+      line: 3,
+    },
+    {
+      name: "ESM default import with computed member",
+      source: `
+import processRunner from "node:child_process";
+processRunner["spawn"]("node", ["server.js"]);
+`,
+      line: 3,
+    },
+    {
+      name: "combined ESM default and named aliases",
+      source: `
+import processRunner, { execFile as runFile } from "node:child_process";
+processRunner["spawn"]("node", ["server.js"]); runFile("node", ["task.js"]);
+`,
+      line: 3,
+      count: 2,
+    },
+    {
+      name: "ESM namespace import with renamed exec member",
+      source: `
+import * as processRunner from "node:child_process";
+processRunner.exec("node server.js");
+`,
+      line: 3,
+    },
+    {
+      name: "CommonJS namespace with computed member",
+      source: `
+const processRunner = require("child_process");
+processRunner["execFile"]("node", ["server.js"]);
+`,
+      line: 3,
+    },
+    {
+      name: "inline CommonJS require with member",
+      source: `
+require("child_process").exec("node server.js");
+`,
+      line: 2,
+    },
+    {
+      name: "inline CommonJS require with computed member",
+      source: `
+require("node:child_process")["spawn"]("node", ["server.js"]);
+`,
+      line: 2,
+    },
+  ])("detects child_process execution through $name", ({ source, line, count = 1 }) => {
+    const findings = scanSource(source, "plugin.ts").filter(
+      (candidate) => candidate.ruleId === "dangerous-exec",
+    );
+
+    expect(findings).toHaveLength(count);
+    expect(findings[0]).toMatchObject({
+      severity: "critical",
+      line,
+    });
+  });
+
+  it("does not duplicate a proven namespace call after a leading block comment", () => {
+    const source = `
+import processRunner from "node:child_process";
+/* scanner context */ processRunner.spawn("node", ["server.js"]);
+`;
+
+    const findings = scanSource(source, "plugin.ts").filter(
+      (candidate) => candidate.ruleId === "dangerous-exec",
+    );
+
+    expect(findings).toHaveLength(1);
+  });
+
+  it("keeps provenance-aware execution matches within the line-rule cap", () => {
+    const source = [
+      `import { spawn as launch } from "node:child_process";`,
+      ...Array.from({ length: 40 }, (_, index) => `launch("node", ["${index}.js"]);`),
+    ].join("\n");
+
+    const findings = scanSource(source, "plugin.ts").filter((candidate) =>
+      candidate.ruleId.startsWith("dangerous-exec"),
+    );
+
+    expect(findings).toHaveLength(33);
+    expect(findings.at(-1)).toMatchObject({
+      ruleId: "dangerous-exec-truncated",
+      severity: "critical",
+      line: 41,
+      message: "8 additional dangerous-exec matches omitted after 32 findings",
+    });
+  });
+
   it("bounds dense line-rule findings and reports truncation", () => {
     const source = [
       `import { spawn } from "node:child_process";`,
@@ -187,7 +295,7 @@ spawn("node", ["second.js"]); execFile("node", ["third.js"]);
   });
 
   it("keeps bounded evidence free of lone surrogates", () => {
-    const source = `${"a".repeat(119)}😀 child_process.exec("echo unsafe")`;
+    const source = `import { exec } from "node:child_process";\n${"a".repeat(119)}😀 exec("echo unsafe")`;
     const finding = scanSource(source, "plugin.ts").find(
       (candidate) => candidate.ruleId === "dangerous-exec",
     );
@@ -309,6 +417,58 @@ import type { ExecOptions } from "child_process";
 const options: ExecOptions = {};
 const match = /^keychain:(.+)$/.exec(value);
 `;
+    const findings = scanSource(source, "plugin.ts");
+    expectRulePresence(findings, "dangerous-exec", false);
+  });
+
+  it.each([
+    {
+      name: "type-only child_process import",
+      source: `
+import type { spawn as launch } from "node:child_process";
+launch("node", ["server.js"]);
+`,
+    },
+    {
+      name: "alias from an unrelated module",
+      source: `
+import { spawn as launch } from "./process-runner.js";
+import type { ExecOptions } from "node:child_process";
+launch("node", ["server.js"]);
+`,
+    },
+    {
+      name: "computed member on an unrelated object",
+      source: `
+import type { ExecOptions } from "node:child_process";
+const processRunner = createProcessRunner();
+processRunner["spawn"]("node", ["server.js"]);
+`,
+    },
+    {
+      name: "unrelated direct call with source-wide child_process context",
+      source: `
+import type { ExecOptions } from "node:child_process";
+spawn("node", ["server.js"]);
+`,
+    },
+    {
+      name: "object member that shares an imported alias",
+      source: `
+import { spawn as launch } from "node:child_process";
+const processRunner = createProcessRunner();
+processRunner.launch("node", ["server.js"]);
+`,
+    },
+    {
+      name: "nested object member that shares a namespace binding",
+      source: `
+import * as processRunner from "node:child_process";
+const wrapper = { processRunner: createProcessRunner() };
+wrapper.processRunner.spawn("node", ["server.js"]);
+`,
+    },
+  ])("does not flag $name without runtime child_process provenance", ({ source }) => {
     const findings = scanSource(source, "plugin.ts");
     expectRulePresence(findings, "dangerous-exec", false);
   });
