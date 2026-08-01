@@ -13,6 +13,7 @@ import { resolveOpenClawDevSourceRoot } from "./dev-source-root.js";
 import { discoverOpenClawPlugins, type PluginDiscoveryResult } from "./discovery.js";
 import type { PluginLoadOptions } from "./loader.js";
 import { loadPluginManifestRegistry } from "./manifest-registry.js";
+import type { PluginManifestContracts } from "./manifest.js";
 import { unwrapDefaultModuleExport } from "./module-export.js";
 import {
   createPluginModuleLoaderCache,
@@ -133,6 +134,7 @@ function createCapabilityPluginRecord(params: {
   source: string;
   rootDir?: string;
   workspaceDir?: string;
+  contracts?: PluginManifestContracts;
 }): PluginRecord {
   return {
     id: params.id,
@@ -171,6 +173,7 @@ function createCapabilityPluginRecord(params: {
     httpRoutes: 0,
     hookCount: 0,
     configSchema: true,
+    contracts: params.contracts,
   };
 }
 
@@ -275,6 +278,7 @@ export function loadBundledCapabilityRuntimeRegistry(params: {
           : candidate.source,
       rootDir: candidate.rootDir,
       workspaceDir: candidate.workspaceDir,
+      contracts: manifest.contracts,
     });
 
     const boundaryLabel = record.source === candidate.source ? "plugin root" : "repo root";
