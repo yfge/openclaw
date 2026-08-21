@@ -207,7 +207,7 @@ function buildWorkerPrompt(params: {
     "",
     "Heartbeat with workboard_heartbeat using the card id and token while working.",
     "When done, call workboard_complete with the card id, token, summary, and proof.",
-    "If you recorded proof separately, pass its returned proofId to workboard_complete.",
+    "If you recorded proof separately, pass its returned proofId to workboard_complete; include proof.status when that proof is still unknown.",
     "If blocked, call workboard_block with the card id, token, and reason.",
     "",
     params.context,

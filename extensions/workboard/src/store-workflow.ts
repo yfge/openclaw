@@ -268,10 +268,20 @@ export class WorkboardWorkflowStore extends WorkboardPromoteStore {
     if (input.proofId !== undefined && !proofId) {
       throw new Error("proofId must be a non-empty string.");
     }
-    if (proofId && !proofInput) {
-      throw new Error("proof is required when proofId is provided.");
+    const correlatedProof = proofId
+      ? existing.metadata?.proof?.find((entry) => entry.id === proofId)
+      : undefined;
+    if (proofId && !correlatedProof) {
+      throw new Error(`proof not found: ${proofId}`);
     }
-    const proof = proofInput ? normalizeProofInput(proofInput, now) : undefined;
+    if (proofId && !proofInput && correlatedProof?.status === "unknown") {
+      throw new Error("proof status is required when resolving an unknown proof.");
+    }
+    const proof = proofInput
+      ? normalizeProofInput(proofInput, now)
+      : correlatedProof?.status !== "unknown"
+        ? correlatedProof
+        : undefined;
     const artifacts = Array.isArray(input.artifacts)
       ? input.artifacts
           .map((artifact) => normalizeArtifact({ ...artifact, createdAt: now }))

@@ -483,7 +483,7 @@ export function createWorkboardTools(params: {
           proofId: Type.Optional(
             Type.String({
               description:
-                "Proof id returned by workboard_proof when resolving that pending proof.",
+                "Proof id returned by workboard_proof. A terminal proof can be reused by id alone; resolving an unknown proof also requires proof.status.",
             }),
           ),
           proof: Type.Optional(

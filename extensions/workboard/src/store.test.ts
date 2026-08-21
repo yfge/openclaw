@@ -1761,6 +1761,43 @@ describe("WorkboardStore", () => {
     expect(completed.metadata?.proof).toEqual([proof]);
   });
 
+  it("reuses a terminal proof by id without repeating the proof payload", async () => {
+    const store = new WorkboardStore(createMemoryStore());
+    const proof = {
+      id: "proof-passed",
+      status: "passed" as const,
+      createdAt: 1_000,
+      command: "pnpm test extensions/workboard",
+    };
+    const card = await store.create({
+      title: "Reuse terminal proof by id",
+      metadata: { proof: [proof] },
+    });
+
+    const completed = await store.complete(card.id, {
+      summary: "Already passed.",
+      proofId: proof.id,
+    });
+
+    expect(completed.metadata?.proof).toEqual([proof]);
+  });
+
+  it("requires a status when resolving an unknown proof by id", async () => {
+    const store = new WorkboardStore(createMemoryStore());
+    const card = await store.create({
+      title: "Resolve unknown proof",
+      metadata: {
+        proof: [{ id: "proof-unknown", status: "unknown", createdAt: 1_000 }],
+      },
+    });
+
+    await expect(
+      store.complete(card.id, {
+        proofId: "proof-unknown",
+      }),
+    ).rejects.toThrow("proof status is required when resolving an unknown proof");
+  });
+
   it("rejects an explicitly correlated terminal proof with a different status", async () => {
     const store = new WorkboardStore(createMemoryStore());
     const card = await store.create({

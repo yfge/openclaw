@@ -178,7 +178,8 @@ an independent quality gate should inspect the attached command, URL, or artifac
 run their own verifier. `workboard_proof` returns the new record's `proofId`. When
 `workboard_complete` reports that same proof's terminal status, pass `proofId` so the
 pending record is resolved in place without losing its identity or timestamp. A proof that
-already has the same terminal status is reused unchanged. Completion proof without
+already has a terminal status can be reused by passing `proofId` alone. An unknown proof
+also requires `proof.status` to resolve it. Completion proof without
 `proofId` remains append-only, so a later retry cannot rewrite older history merely because
 its command or note is identical.
 
