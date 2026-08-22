@@ -137,15 +137,14 @@ export async function sendDiscordOutboundPayload(params: {
         throw err;
       }
       log.warn("discord voice send failed; continuing without voice", { error: err });
-      if (!fallbackText) {
-        lastResult = createDiscordUnknownPayloadResult(sendContext.target);
-      } else {
-        lastResult = await sendContext.send(sendContext.target, fallbackText, {
+      if (fallbackText) {
+        await sendContext.send(sendContext.target, fallbackText, {
           verbose: false,
           ...resolveDiscordFormattedDeliveryOptions(ctx, sendContext, voiceReply),
           onDeliveryResult: resolveDiscordDeliveryProgress(ctx),
         });
       }
+      throw err;
     }
     if (deliveredVoice) {
       await ctx.onDeliveryResult?.(

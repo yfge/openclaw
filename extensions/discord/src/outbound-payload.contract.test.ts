@@ -202,10 +202,10 @@ describe("Discord voice fallback delivery safety", () => {
       label: "voice preparation was aborted before message creation",
       error: Object.assign(new Error("audio source aborted"), { name: "AbortError" }),
     },
-  ])("preserves text fallback when $label", async ({ error }) => {
+  ])("reports failed voice delivery after text fallback when $label", async ({ error }) => {
     const { promise, textDelivery, voiceDelivery } = runVoicePayload(error);
 
-    await expect(promise).resolves.toMatchObject({ messageId: "fallback-text" });
+    await expect(promise).rejects.toBe(error);
     expect(voiceDelivery).toHaveBeenCalledOnce();
     expect(textDelivery).toHaveBeenCalledOnce();
   });
@@ -247,17 +247,20 @@ describe("Discord voice fallback delivery safety", () => {
         cause: Object.assign(new Error("DNS lookup failed"), { code: "ENOTFOUND" }),
       }),
     },
-  ])("retains the text fallback after $label", async ({ error }) => {
-    const { promise, textDelivery, voiceDelivery } = runVoicePayload(error);
+  ])(
+    "reports failed voice delivery while retaining text fallback after $label",
+    async ({ error }) => {
+      const { promise, textDelivery, voiceDelivery } = runVoicePayload(error);
 
-    await expect(promise).resolves.toMatchObject({ messageId: "fallback-text" });
-    expect(voiceDelivery).toHaveBeenCalledOnce();
-    expect(textDelivery).toHaveBeenCalledWith(
-      "channel:123456",
-      "answer",
-      expect.objectContaining({ cfg: {} }),
-    );
-  });
+      await expect(promise).rejects.toBe(error);
+      expect(voiceDelivery).toHaveBeenCalledOnce();
+      expect(textDelivery).toHaveBeenCalledWith(
+        "channel:123456",
+        "answer",
+        expect.objectContaining({ cfg: {} }),
+      );
+    },
+  );
 
   it("keeps an existing transcript when an audio encoder fails before voice delivery", async () => {
     const { promise, textDelivery, voiceDelivery } = runVoicePayload(
@@ -267,7 +270,7 @@ describe("Discord voice fallback delivery safety", () => {
       },
     );
 
-    await expect(promise).resolves.toMatchObject({ messageId: "" });
+    await expect(promise).rejects.toThrow("ffmpeg unavailable");
     expect(voiceDelivery).toHaveBeenCalledOnce();
     expect(textDelivery).not.toHaveBeenCalled();
   });
