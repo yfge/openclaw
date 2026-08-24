@@ -69,6 +69,8 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- **OpenCode Zen Ox Alpha routing:** add trusted `x-preview-f-free` catalog metadata so the model uses OpenCode's compatible endpoint instead of falling back to OpenAI. (#128567) Thanks @hye.
+
 - **Control UI terminal transcript settlement:** retire live commentary, tool, and streamed reply projections atomically when the matching durable terminal message arrives, preventing duplicated final responses and transient row overlap after steering. Fixes #127209. Thanks @shakkernerd.
 - **Control UI Codex compaction history:** preserve successful native context compactions as durable, model-excluded activity inside completed work traces after the composer status clears or the session reloads. Fixes #127206. Thanks @shakkernerd.
 - **Control UI Codex steering:** preserve pre-steer commentary and tool activity in durable transcript order, keep it visible while active, and collapse it before the steering message after completion. Fixes #126938. Thanks @shakkernerd.

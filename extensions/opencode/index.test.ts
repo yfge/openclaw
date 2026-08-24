@@ -96,6 +96,7 @@ const ACTIVE_MODEL_IDS = [
   "north-mini-code-free",
   "laguna-s-2.1-free",
   "longcat-2.0-free",
+  "x-preview-f-free",
 ] as const;
 
 const DEPRECATED_MODEL_IDS = [
@@ -334,6 +335,18 @@ describe("opencode provider plugin", () => {
       contextWindow: 1_048_576,
       maxTokens: 131_072,
       cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 0 },
+    });
+    expect(requireMapEntry(models, "x-preview-f-free")).toMatchObject({
+      name: "Ox Alpha Free",
+      api: "openai-completions",
+      baseUrl: "https://opencode.ai/zen/v1",
+      input: ["text", "image"],
+      contextWindow: 1_000_000,
+      maxTokens: 131_072,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      compat: {
+        supportedReasoningEfforts: ["low", "high", "max"],
+      },
     });
     expect(requireMapEntry(models, "minimax-m3")).toMatchObject({
       name: "MiniMax M3",

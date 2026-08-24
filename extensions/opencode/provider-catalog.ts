@@ -150,6 +150,7 @@ const MODEL_CAPABILITY_ROWS = [
   ["north-mini-code-free", 256000, 64000, T, E_NONE_HIGH],
   ["laguna-s-2.1-free", 256000, 32000, T, E_LMH],
   ["longcat-2.0-free", 1000000, 131072, T],
+  ["x-preview-f-free", 1000000, 131072, TI, E_LOW_HIGH_MAX],
   ["claude-opus-4-1", 200000, 32000, TI, undefined, DEPRECATED],
 ] as const satisfies readonly ZenModelCapabilityRow[];
 type ZenModelId = (typeof MODEL_CAPABILITY_ROWS)[number][0];
@@ -311,6 +312,7 @@ const MODEL_COSTS: Record<ZenModelId, ModelDefinitionConfig["cost"]> = {
   "north-mini-code-free": FREE_COST,
   "qwen3.5-plus": { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0.25 },
   "qwen3.6-plus": { input: 0.5, output: 3, cacheRead: 0.05, cacheWrite: 0.625 },
+  "x-preview-f-free": FREE_COST,
 };
 
 const MODEL_NAMES: Record<ZenModelId, string> = {
@@ -376,6 +378,7 @@ const MODEL_NAMES: Record<ZenModelId, string> = {
   "north-mini-code-free": "North Mini Code Free",
   "qwen3.5-plus": "Qwen3.5 Plus",
   "qwen3.6-plus": "Qwen3.6 Plus",
+  "x-preview-f-free": "Ox Alpha Free",
 };
 
 type OpencodeZenModelDefinition = ModelDefinitionConfig & {
